@@ -1,0 +1,92 @@
+---
+title: "Compiling on Windows"
+description: "Build Luanti from source on Windows using MSVC and vcpkg, with optional Windows Installer creation via WiX Toolset."
+---
+
+## Requirements
+
+- [Visual Studio 2015 or newer](https://visualstudio.microsoft.com)
+- [CMake](https://cmake.org/download/)
+- [vcpkg](https://github.com/Microsoft/vcpkg)
+- [Git](https://git-scm.com/downloads)
+
+## Install dependencies with vcpkg
+
+Using vcpkg as the package manager is strongly recommended. After building vcpkg, install all required libraries:
+
+```powershell
+vcpkg install zlib zstd curl[ssl] openal-soft libvorbis libogg libjpeg-turbo sqlite3 freetype luajit gmp jsoncpp gettext[tools] sdl2 --triplet x64-windows
+```
+
+Use `--triplet` to specify your target architecture, for example `x64-windows` or `x86-windows`.
+
+<Info>
+  Several packages are optional but recommended:
+  - `curl[ssl]` — required for online features such as the server list and content browser
+  - `openal-soft`, `libvorbis`, `libogg` — required for in-game sound
+  - `luajit` — replaces the built-in Lua interpreter with a faster JIT compiler
+  - `gmp`, `jsoncpp` — otherwise the bundled versions are compiled instead
+  - `gettext` — required for translations
+</Info>
+
+## Compile Luanti
+
+<Tabs>
+  <Tab title="CMake GUI">
+    <Steps>
+      <Step title="Open CMake GUI">
+        Start the CMake GUI application.
+      </Step>
+      <Step title="Set source and build directories">
+        - Click **Browse Source...** and select the `luanti` directory.
+        - Click **Browse Build...** and select an empty build directory, e.g. `luanti-build`.
+      </Step>
+      <Step title="Configure">
+        Click **Configure**. When prompted:
+        1. Choose the correct Visual Studio version and target platform — it must match your installed dependencies.
+        2. Select **Specify toolchain file for cross-compiling**.
+        3. Click **Next**.
+        4. Select your vcpkg toolchain file, e.g. `D:/vcpkg/scripts/buildsystems/vcpkg.cmake`.
+        5. Click **Finish** and wait for CMake to generate the cache.
+      </Step>
+      <Step title="Resolve errors and generate">
+        If errors appear, fix them and click **Configure** again. Once the configuration succeeds, click **Generate**.
+      </Step>
+      <Step title="Build in Visual Studio">
+        Click **Open Project**, then build the solution inside Visual Studio.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Command line (PowerShell)">
+    Run the following in PowerShell from your source directory:
+
+    ```powershell
+    cmake . -G"Visual Studio 16 2019" `
+        -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+        -DCMAKE_BUILD_TYPE=Release `
+        -DENABLE_CURSES=OFF
+    cmake --build . --config Release
+    ```
+
+    Adjust the generator string to match your installed Visual Studio version, and update the path to `vcpkg.cmake` as needed.
+  </Tab>
+</Tabs>
+
+## Create a Windows installer (optional)
+
+You can package Luanti as an `.msi` installer using WiX Toolset.
+
+**Additional requirements:**
+- [Visual Studio 2017](https://visualstudio.microsoft.com/)
+- [WiX Toolset](https://wixtoolset.org/) — install via **Visual Studio 2017 Installer → Optional Features → WiX Toolset**
+
+<Steps>
+  <Step title="Build the binaries">
+    Build Luanti as described above, but make sure `RUN_IN_PLACE` is **unchecked** (set to `FALSE`).
+  </Step>
+  <Step title="Generate the installer">
+    Open the generated Visual Studio project. Right-click **Package** and choose **Generate**. Generating the installer may take a few minutes.
+  </Step>
+</Steps>
+
+For a full list of CMake options, see the [compiling overview](/compiling/overview).

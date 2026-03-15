@@ -1,0 +1,228 @@
+---
+title: "Server Configuration"
+description: "Reference for important server settings in minetest.conf, including networking, security, gameplay, and database backend options."
+---
+
+Luanti reads its configuration from `minetest.conf`. On a dedicated server the default location is `../minetest.conf` relative to the binary, or you can specify a path explicitly with `--config`.
+
+All settings in `minetest.conf` follow the format:
+
+```ini
+setting_name = value
+```
+
+Comment lines start with `#`. To activate a setting, remove the leading `#`.
+
+<Info>
+  A fully annotated reference file with every available setting and its default value ships with Luanti at `minetest.conf.example`. The Docker image installs it to `/etc/minetest/minetest.conf`.
+</Info>
+
+## Server Identity & Server List
+
+These settings control how your server appears in-game and on the public server list.
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `server_name` | string | `Luanti server` | Name shown to players on join and in the server list. |
+| `server_description` | string | `mine here` | Short description shown in the server list. |
+| `server_address` | string | _(empty)_ | Public domain name of the server, shown in the server list. |
+| `server_url` | string | _(empty)_ | Homepage URL shown in the server list. |
+| `server_announce` | bool | `false` | When `true`, the server is reported to the server list automatically. |
+| `server_announce_send_players` | bool | `true` | When `false`, only the player count (not names) is sent to the server list. |
+| `serverlist_url` | string | `https://servers.luanti.org` | URL of the server list to announce to. |
+
+### Message of the Day
+
+```ini
+motd = Welcome to my server! Please read the rules at example.com/rules
+```
+
+The MOTD is displayed to every player when they connect. It accepts plain text.
+
+## Networking
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `port` | int (1–65535) | `30000` | UDP port the server listens on. |
+| `bind_address` | string | _(empty)_ | Network interface to bind. Leave blank to bind all interfaces. |
+| `ipv6_server` | bool | `true` | Enable IPv6. Ignored when `bind_address` is set. |
+| `max_users` | int (0–65535) | `15` | Maximum simultaneous players. `0` means unlimited. |
+| `remote_media` | string | _(empty)_ | URL prefix for serving media over HTTP instead of UDP. |
+
+### Protocol Version
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `strict_protocol_version_checking` | bool | `false` | Disallow older clients from connecting. |
+| `protocol_version_min` | int (1–65535) | `1` | Oldest protocol version allowed. Overridden by `strict_protocol_version_checking`. |
+
+<Warning>
+  Enabling `strict_protocol_version_checking` will prevent clients running older Luanti versions from joining. Only enable this if you need features unavailable in older protocol versions.
+</Warning>
+
+## Security
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `default_password` | string | _(empty)_ | Password required for new players to register. |
+| `disallow_empty_password` | bool | `false` | Prevent players from setting an empty password. |
+| `default_privs` | string | `interact, shout` | Comma-separated list of privileges granted to new players automatically. |
+| `basic_privs` | string | `interact, shout` | Privileges that players with the `basic_privs` privilege can grant or revoke. |
+
+### Anticheat
+
+```ini
+# Flags: digging, interaction, movement
+anticheat_flags = digging,interaction,movement
+
+# Increase if players experience stuttery movement
+anticheat_movement_tolerance = 1.0
+```
+
+### Client-Side Modding Restrictions
+
+The `csm_restriction_flags` setting is a bitmask controlling which client-side scripting capabilities are allowed:
+
+| Flag | Value | Effect |
+|---|---|---|
+| `LOAD_CLIENT_MODS` | 1 | Disable loading client-provided mods |
+| `CHAT_MESSAGES` | 2 | Disable `send_chat_message` from CSM |
+| `READ_ITEMDEFS` | 4 | Disable `get_item_def` from CSM |
+| `READ_NODEDEFS` | 8 | Disable `get_node_def` from CSM |
+| `LOOKUP_NODES_LIMIT` | 16 | Limit `get_node` calls to `csm_restriction_noderange` |
+| `READ_PLAYERINFO` | 32 | Disable `get_player_names` from CSM |
+
+```ini
+# Default: 62 (all except LOAD_CLIENT_MODS)
+csm_restriction_flags = 62
+```
+
+## Gameplay
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `enable_damage` | bool | `false` | Allow players to take damage and die. |
+| `enable_pvp` | bool | `true` | Allow players to damage each other. |
+| `creative_mode` | bool | `false` | Enable creative mode for all players. |
+| `time_speed` | int | `72` | Speed of the day/night cycle. 72 = 20 minutes, 0 = frozen. |
+| `world_start_time` | int (0–23999) | `6125` | Time of day when a new world is created (millihours). |
+| `static_spawnpoint` | string | _(empty)_ | Fixed spawn position, e.g. `0,10,0`. |
+| `item_entity_ttl` | int | `900` | Seconds before dropped items despawn. `-1` disables. |
+
+### Chat
+
+```ini
+# Strip color codes from player chat messages
+strip_color_codes = true
+
+# Max chat message length
+chat_message_max_size = 500
+
+# Rate limiting: messages per 10 seconds
+chat_message_limit_per_10sec = 8.0
+
+# Kick players who exceed this many messages per 10 seconds
+chat_message_limit_trigger_kick = 50
+```
+
+## Database Backends
+
+Luanti supports multiple storage backends. You configure them in the world's `world.mt` file (not in `minetest.conf`). See the [Worlds](./worlds) page for `world.mt` format details.
+
+### Map Backend
+
+Controls where map data (MapBlocks) is stored.
+
+```ini
+# world.mt
+backend = sqlite3
+```
+
+<Tabs>
+  <Tab title="SQLite3 (default)">
+    No external service required. Best for small to medium servers.
+
+    ```ini
+    backend = sqlite3
+    ```
+
+    Tune SQLite sync mode (0=off, 1=normal, 2=full):
+    ```ini
+    # minetest.conf
+    sqlite_synchronous = 2
+    ```
+  </Tab>
+  <Tab title="LevelDB">
+    High-performance key-value store. Requires `-DENABLE_LEVELDB=TRUE` at build time.
+
+    ```ini
+    backend = leveldb
+    ```
+  </Tab>
+  <Tab title="PostgreSQL">
+    Suitable for large servers and replication scenarios. Requires `-DENABLE_POSTGRESQL=TRUE`.
+
+    ```ini
+    backend = postgresql
+    pgsql_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+    ```
+  </Tab>
+  <Tab title="Redis">
+    In-memory store. Requires `-DENABLE_REDIS=TRUE`.
+
+    ```ini
+    backend = redis
+    redis_address = 127.0.0.1
+    redis_hash = luanti_map
+    redis_port = 6379
+    redis_password = hunter2
+    ```
+  </Tab>
+</Tabs>
+
+### Player Backend
+
+Controls where player data is stored.
+
+```ini
+# world.mt
+player_backend = sqlite3
+```
+
+Supported values: `sqlite3`, `postgresql`.
+
+For PostgreSQL:
+```ini
+pgsql_player_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+```
+
+### Auth Backend
+
+Controls where authentication data (passwords and privileges) is stored.
+
+```ini
+# world.mt
+auth_backend = files
+```
+
+Supported values: `files` (stores `auth.txt`), `sqlite3` (stores `auth.sqlite`), `postgresql`.
+
+## Server Performance
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `dedicated_server_step` | float (0–1) | `0.09` | Server tick interval in seconds. |
+| `server_map_save_interval` | float | `5.3` | How often (seconds) changed map data is flushed to disk. |
+| `server_unload_unused_data_timeout` | int | `29` | Seconds before unused MapBlocks are unloaded from RAM. |
+| `active_block_range` | int | `4` | Radius (in MapBlocks) around each player where objects are active. |
+| `active_object_send_range_blocks` | int | `8` | Distance (in MapBlocks) at which clients are informed of objects. |
+| `max_block_send_distance` | int | `12` | Maximum MapBlock send distance to clients (in MapBlocks). |
+| `server_side_occlusion_culling` | bool | `true` | Skip sending invisible MapBlocks, reducing bandwidth by 50–80%. |
+
+## Admin Account
+
+Set the admin player name in `minetest.conf`. A client connecting with this name receives all privileges.
+
+```ini
+name = admin
+```

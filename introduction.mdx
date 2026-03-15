@@ -1,0 +1,90 @@
+---
+title: "Introduction"
+description: "Luanti is a free, open-source voxel game engine with easy modding and game creation"
+---
+
+<img
+  src="/images/logo.png"
+  alt="Luanti Logo"
+  width="120"
+  style={{ marginBottom: "1.5rem" }}
+/>
+
+# Welcome to Luanti
+
+Luanti (formerly Minetest) is a free, open-source voxel game engine that lets you create and play games in infinitely large voxel worlds. With a powerful Lua scripting API, an active modding community, and cross-platform support, Luanti is the platform of choice for voxel game development.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Luanti running and create your first mod in minutes
+  </Card>
+  <Card title="Modding Guide" icon="puzzle-piece" href="/modding/overview">
+    Learn how to create mods with the Lua API
+  </Card>
+  <Card title="Game Creation" icon="gamepad" href="/games/overview">
+    Build a complete game on the Luanti engine
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/lua-api-overview">
+    Full Lua API documentation for mod developers
+  </Card>
+</CardGroup>
+
+## What is Luanti?
+
+Luanti is a voxel **game engine** — not just a single game. It provides the engine, and games are built on top of it using Lua scripting. This means:
+
+- **Players** can download games and mods from [ContentDB](https://content.luanti.org/)
+- **Modders** can extend any game using the Lua modding API
+- **Game creators** can build entirely new voxel games on top of the engine
+
+<Info>
+Luanti was previously known as Minetest. The `minetest` Lua namespace has been renamed to `core`, though `minetest` still works as an alias for backwards compatibility.
+</Info>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Lua Modding API" icon="scroll">
+    A comprehensive Lua API lets you register nodes, items, entities, map generators, chat commands, and more.
+  </Card>
+  <Card title="Multiplayer Support" icon="users">
+    Built-in client-server architecture with authentication, privileges, and support for hundreds of concurrent players.
+  </Card>
+  <Card title="Procedural Mapgen" icon="map">
+    Multiple built-in map generation algorithms (V5, V6, V7, Valleys, Carpathian, Fractal, Flat, and more) plus a custom mapgen scripting API.
+  </Card>
+  <Card title="Cross-Platform" icon="laptop">
+    Runs on Linux, Windows, macOS, and Android. Build once and distribute everywhere.
+  </Card>
+  <Card title="ContentDB" icon="store">
+    A community hub with thousands of mods, games, and texture packs, all installable directly from the main menu.
+  </Card>
+  <Card title="Multiple Map Backends" icon="database">
+    Supports SQLite3 (default), LevelDB, PostgreSQL, and Redis for map storage.
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+The Luanti codebase is organized as follows:
+
+| Directory | Description |
+|-----------|-------------|
+| `src/` | C++ engine source code |
+| `builtin/` | Built-in Lua scripts (game logic, main menu, etc.) |
+| `doc/` | Documentation including the full Lua API reference |
+| `games/` | Default games bundled with Luanti |
+| `mods/` | Built-in mods |
+| `client/` | Client-specific shaders and assets |
+| `textures/` | Engine textures and UI assets |
+
+## License
+
+Luanti is licensed under the **GNU Lesser General Public License v2.1 or later** (LGPLv2.1+). This means you can freely use, modify, and distribute Luanti, and build games on it with your own license terms.
+
+## Community
+
+- **Forum**: [forum.luanti.org](https://forum.luanti.org/)
+- **ContentDB**: [content.luanti.org](https://content.luanti.org/)
+- **IRC**: `#luanti` and `#luanti-dev` on Libera.Chat
+- **GitHub**: [github.com/luanti-org/luanti](https://github.com/luanti-org/luanti)

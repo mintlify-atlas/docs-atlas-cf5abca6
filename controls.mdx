@@ -1,0 +1,104 @@
+---
+title: "Controls"
+description: "Complete reference for all default Luanti key bindings, organized by category. All controls are re-bindable in Settings."
+---
+
+All controls are re-bindable using **Settings → Controls** or by editing your `minetest.conf` file. The table below lists every default binding.
+
+<Note>
+  Some actions require specific [privileges](https://docs.luanti.org/) granted by a server admin — for example, fly mode requires the `fly` privilege and fast mode requires `fast`.
+</Note>
+
+## Movement
+
+| Input | Action |
+|---|---|
+| Move mouse | Look around |
+| W | Move forward |
+| A | Move left |
+| S | Move backward |
+| D | Move right |
+| Space | Jump / move up |
+| Shift | Sneak / move down |
+| E | Aux1 — move fast in fast mode; games may assign additional actions |
+
+## Interaction
+
+| Input | Action |
+|---|---|
+| Left mouse button | Dig / punch / use |
+| Right mouse button | Place / use |
+| Shift + Right mouse button | Build (place without triggering use action) |
+| Q | Drop entire itemstack |
+| Shift + Q | Drop a single item |
+
+## Inventory and hotbar
+
+| Input | Action |
+|---|---|
+| I | Open inventory menu |
+| Mouse wheel | Cycle through hotbar items |
+| 0–9 | Select hotbar slot directly |
+
+## Chat and commands
+
+| Input | Action |
+|---|---|
+| T | Open chat window |
+| / | Open chat window pre-filled with `/` for commands |
+
+## Camera and view
+
+| Input | Action |
+|---|---|
+| C | Cycle through camera modes (first person, third person, etc.) |
+| V | Cycle through minimap modes |
+| Shift + V | Change minimap orientation |
+| Z | Zoom (requires `zoom` privilege) |
+| + | Increase view range |
+| - | Decrease view range |
+
+## Special movement modes
+
+| Input | Action |
+|---|---|
+| K | Enable / disable fly mode (requires `fly` privilege) |
+| J | Enable / disable fast mode (requires `fast` privilege) |
+| H | Enable / disable noclip mode (requires `noclip` privilege) |
+
+## HUD and debug
+
+| Input | Action |
+|---|---|
+| F1 | Hide / show HUD |
+| F2 | Hide / show chat |
+| F3 | Disable / enable fog |
+| F4 | Disable / enable camera update (mapblocks stop updating; disabled in release builds) |
+| F5 | Cycle through debug information screens |
+| F6 | Cycle through profiler info screens |
+| F10 | Show / hide console |
+| F12 | Take screenshot |
+
+## Menu and session
+
+| Input | Action |
+|---|---|
+| Esc | Open pause menu / abort / exit (pauses only in singleplayer) |
+
+## Rebinding controls
+
+You can change any binding in two ways:
+
+**In-game settings UI:**
+1. Open the pause menu and go to **Settings → Controls**.
+2. Click any action and press the new key.
+
+**Configuration file:** Add or change a `keymap_*` entry in your `minetest.conf`. For example:
+
+```ini
+# minetest.conf
+keymap_jump = SYSTEM_SCANCODE_44
+keymap_inventory = SYSTEM_SCANCODE_12
+```
+
+See the [configuration file reference](/configuration/config-file) for a full list of `keymap_*` settings and their accepted values.

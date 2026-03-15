@@ -1,0 +1,263 @@
+---
+title: "Lua Scripting Basics"
+description: "Learn the Luanti Lua scripting environment: the init.lua entry point, the core namespace, startup sequence, paths, and debugging with core.log()."
+---
+
+Luanti mods are written in Lua 5.1 and run entirely on the server. The engine transfers definitions and media to clients automatically. This page covers the fundamentals you need before writing your first mod.
+
+## Mod structure
+
+Every mod lives in its own directory. The minimum required file is `init.lua`:
+
+```
+mods/
+└── mymod/
+    ├── mod.conf
+    ├── init.lua
+    ├── textures/
+    └── sounds/
+```
+
+`mod.conf` is a key-value settings file that provides metadata:
+
+```ini
+name = mymod
+title = My Mod
+description = A short description shown in the mods menu.
+depends = default
+optional_depends = stairs
+```
+
+<Note>
+Use `modname:whatever` for all registered names (nodes, items, entities). The engine enforces this to prevent name collisions. You can override another mod's registration by prefixing with `:`, e.g. `:default:stone`.
+</Note>
+
+## The init.lua entry point
+
+`init.lua` is the main entry point for your mod. When the server starts, Luanti runs each mod's `init.lua` in a **shared Lua environment** — all mods share the same global namespace.
+
+From the API reference:
+
+> The main Lua script. Running this script should register everything it wants to register. Subsequent execution depends on Luanti calling the registered callbacks.
+
+This means your `init.lua` runs once at startup. You register nodes, items, entities, and callbacks during this phase. After startup, the engine drives your code by calling registered callbacks.
+
+```lua
+-- init.lua for a simple mod
+local modname = core.get_current_modname()
+local modpath = core.get_modpath(modname)
+
+-- Log that this mod loaded
+core.log("action", "[" .. modname .. "] loading...")
+
+-- Load other files within the mod
+dofile(modpath .. "/nodes.lua")
+dofile(modpath .. "/crafts.lua")
+dofile(modpath .. "/commands.lua")
+
+core.log("action", "[" .. modname .. "] loaded.")
+```
+
+## The startup sequence
+
+<Steps>
+  <Step title="Server starts">
+    Luanti locates all mods in the load paths and resolves dependencies.
+  </Step>
+  <Step title="init.lua files run">
+    Each mod's `init.lua` executes in dependency order. All `core.register_*` calls happen here.
+  </Step>
+  <Step title="core.register_on_mods_loaded callbacks fire">
+    After all mods have loaded and before the media is cached or aliases are handled, any functions registered with `core.register_on_mods_loaded()` are called.
+  </Step>
+  <Step title="Server becomes active">
+    The world loads and the server step loop begins. From this point, the engine calls your registered callbacks (`globalstep`, node callbacks, entity callbacks, etc.).
+  </Step>
+</Steps>
+
+<Warning>
+Only call `core.register_*` functions at load time (during `init.lua` execution). Registering content after load time is not supported.
+</Warning>
+
+## The `core` namespace
+
+All Luanti engine functions live in the `core` table. The engine was previously known as Minetest, so `minetest` still works as an alias, but `core` is preferred for new code.
+
+```lua
+-- Both of these work, but core is preferred
+core.register_node("mymod:stone", { ... })
+minetest.register_node("mymod:stone", { ... })  -- deprecated alias
+```
+
+`core` has been available since version 0.4.10, so you can use it safely without breaking backwards compatibility.
+
+## Paths: path_share and path_user
+
+Luanti uses two root directories:
+
+<CardGroup cols={2}>
+  <Card title="path_share" icon="folder">
+    Contains possibly read-only content for the engine, including built-in games and mods. On Linux system installs this is typically `/usr/share/minetest`.
+  </Card>
+  <Card title="path_user" icon="folder-open">
+    Contains mods and games installed by the user, as well as worlds and settings. On Linux this is typically `~/.minetest`.
+  </Card>
+</CardGroup>
+
+With a local build (`RUN_IN_PLACE=1`), both `path_share` and `path_user` point to the build directory.
+
+To get your own mod's directory at runtime:
+
+```lua
+local modpath = core.get_modpath(core.get_current_modname())
+-- modpath is e.g. "/home/user/.minetest/mods/mymod"
+
+-- Load a file relative to the mod directory
+dofile(modpath .. "/helpers.lua")
+
+-- Load a schematic from the mod
+local schematic_path = modpath .. "/schematics/mystructure.mts"
+```
+
+Mods are looked up from these paths:
+
+```
+games/<gameid>/mods/
+mods/
+worlds/<worldname>/worldmods/
+```
+
+## Logging with core.log()
+
+Use `core.log()` for all debug and status output. It feeds into the server log and the debug output.
+
+```lua
+core.log([level,] text)
+```
+
+The `level` parameter controls severity and defaults to `"none"`:
+
+<Tabs>
+  <Tab title="Levels">
+    | Level | Use |
+    |-------|-----|
+    | `"none"` | Default; always shown |
+    | `"error"` | Serious errors |
+    | `"warning"` | Recoverable issues |
+    | `"action"` | Normal events (startup, important state changes) |
+    | `"info"` | Verbose informational output |
+    | `"verbose"` | Very detailed debugging |
+  </Tab>
+  <Tab title="Examples">
+    ```lua
+    core.log("action", "[mymod] Player joined: " .. player_name)
+    core.log("warning", "[mymod] Expected node not found at " .. dump(pos))
+    core.log("error", "[mymod] Failed to load config file")
+    core.log("info", "[mymod] Registered " .. count .. " biomes")
+
+    -- core.debug() is equivalent to core.log("none", ...)
+    -- with all arguments joined by tabs (similar to print)
+    core.debug("Position:", dump(pos), "Node:", node.name)
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+Use `dump(value)` to serialize any Lua value to a human-readable string. It's built in and invaluable for debugging tables:
+
+```lua
+local pos = {x=1, y=2, z=3}
+core.log("info", dump(pos))  -- outputs: {x=1, y=2, z=3}
+```
+</Tip>
+
+## Basic script structure
+
+Here is a complete, working minimal mod:
+
+```lua
+-- init.lua
+-- A mod that adds a glowing crystal node and a chat command.
+
+local modname = core.get_current_modname()
+
+-- Register a node
+core.register_node("mymod:crystal", {
+    description = "Glowing Crystal",
+    tiles = {"mymod_crystal.png"},
+    light_source = core.LIGHT_MAX,
+    groups = {cracky = 3},
+    sounds = default.node_sound_glass_defaults(),
+})
+
+-- Register a craft recipe
+core.register_craft({
+    output = "mymod:crystal",
+    recipe = {
+        {"",             "default:glass", ""},
+        {"default:glass", "default:mese",  "default:glass"},
+        {"",             "default:glass", ""},
+    },
+})
+
+-- Register a chat command
+core.register_chatcommand("givecrystal", {
+    description = "Give yourself a glowing crystal",
+    func = function(name, param)
+        local player = core.get_player_by_name(name)
+        if not player then
+            return false, "Player not found"
+        end
+        local inv = player:get_inventory()
+        inv:add_item("main", "mymod:crystal")
+        return true, "Crystal added to inventory!"
+    end,
+})
+
+core.log("action", "[" .. modname .. "] loaded.")
+```
+
+## Deferred execution with core.after()
+
+You can schedule code to run after a delay using `core.after()`:
+
+```lua
+-- Run after 0 seconds (next server step)
+core.after(0, function()
+    core.log("action", "All mods are now loaded")
+end)
+
+-- Run after 5 seconds
+core.after(5, function()
+    core.chat_send_all("Server has been running for 5 seconds")
+end)
+```
+
+This is often used to perform actions that require the world or all mods to be fully initialized.
+
+## Global callback registration
+
+You register callbacks once at load time; the engine calls them at the appropriate time:
+
+```lua
+-- Called every server step (~0.1 seconds)
+core.register_globalstep(function(dtime)
+    -- dtime is seconds since last call
+end)
+
+-- Called after all mods finish loading
+core.register_on_mods_loaded(function()
+    core.log("action", "All mods loaded, performing post-init")
+end)
+
+-- Called on server shutdown
+core.register_on_shutdown(function()
+    -- Save data here
+end)
+
+-- Called when a player joins
+core.register_on_joinplayer(function(player, last_login)
+    local name = player:get_player_name()
+    core.chat_send_player(name, "Welcome back, " .. name .. "!")
+end)
+```

@@ -1,0 +1,164 @@
+---
+title: "Compiling on Linux"
+description: "Step-by-step instructions for building Luanti from source on Debian, Ubuntu, Fedora, Arch, openSUSE, Alpine, and Void Linux."
+---
+
+## Dependencies
+
+The table below lists all required and optional build dependencies.
+
+| Dependency | Version | Notes |
+|---|---|---|
+| GCC | 7.5+ | Clang 7.0.1+ also works |
+| CMake | 3.5+ | |
+| libjpeg | — | |
+| libpng | — | |
+| SDL | 2.x | |
+| Freetype | 2.0+ | |
+| SQLite3 | 3+ | |
+| Zlib | — | |
+| Zstd | 1.0+ | |
+| LuaJIT | 2.0+ | Bundled Lua 5.1 is used if not present |
+| GMP | 5.0.0+ | Bundled mini-GMP is used if not present |
+| JsonCPP | 1.0.0+ | Bundled JsonCPP is used if not present |
+| Curl | 7.56.0+ | Optional |
+| gettext | — | Optional |
+| OpenSSL | 3.0+ | Optional — only `libcrypto` is used |
+
+### Install dependencies
+
+<Tabs>
+  <Tab title="Debian / Ubuntu">
+    ```bash
+    sudo apt install g++ make libc6-dev cmake libpng-dev libjpeg-dev \
+      libgl1-mesa-dev libsqlite3-dev libogg-dev libvorbis-dev libopenal-dev \
+      libcurl4-gnutls-dev libfreetype6-dev zlib1g-dev libgmp-dev libjsoncpp-dev \
+      libzstd-dev libluajit-5.1-dev gettext libsdl2-dev
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install make automake gcc gcc-c++ kernel-devel cmake \
+      libcurl-devel openal-soft-devel libpng-devel libjpeg-devel \
+      libvorbis-devel libogg-devel freetype-devel mesa-libGL-devel \
+      zlib-devel jsoncpp-devel gmp-devel sqlite-devel luajit-devel \
+      leveldb-devel ncurses-devel spatialindex-devel libzstd-devel \
+      gettext SDL2-devel
+    ```
+  </Tab>
+  <Tab title="openSUSE">
+    ```bash
+    sudo zypper install gcc gcc-c++ cmake libjpeg8-devel libpng16-devel \
+      openal-soft-devel libcurl-devel sqlite3-devel luajit-devel \
+      libzstd-devel Mesa-libGL-devel libvorbis-devel freetype2-devel SDL2-devel
+    ```
+  </Tab>
+  <Tab title="Arch Linux">
+    ```bash
+    sudo pacman -S --needed base-devel libcurl-gnutls cmake libpng \
+      libjpeg-turbo sqlite libogg libvorbis openal freetype2 jsoncpp \
+      gmp luajit leveldb ncurses zstd gettext sdl2
+    ```
+  </Tab>
+  <Tab title="Alpine">
+    ```bash
+    sudo apk add build-base cmake libpng-dev jpeg-dev mesa-dev sqlite-dev \
+      libogg-dev libvorbis-dev openal-soft-dev curl-dev freetype-dev \
+      zlib-dev gmp-dev jsoncpp-dev luajit-dev zstd-dev gettext sdl2-dev
+    ```
+  </Tab>
+  <Tab title="Void">
+    ```bash
+    sudo xbps-install cmake libpng-devel jpeg-devel mesa sqlite-devel \
+      libogg-devel libvorbis-devel libopenal-devel libcurl-devel \
+      freetype-devel zlib-devel gmp-devel jsoncpp-devel LuaJIT-devel \
+      zstd libzstd-devel gettext SDL2-devel
+    ```
+  </Tab>
+</Tabs>
+
+## Download the source
+
+<Tabs>
+  <Tab title="With Git (recommended)">
+    First install Git if you haven't already:
+
+    <Tabs>
+      <Tab title="Debian / Ubuntu">
+        ```bash
+        sudo apt install git
+        ```
+      </Tab>
+      <Tab title="Fedora">
+        ```bash
+        sudo dnf install git
+        ```
+      </Tab>
+      <Tab title="Arch Linux">
+        ```bash
+        sudo pacman -S git
+        ```
+      </Tab>
+      <Tab title="Alpine">
+        ```bash
+        sudo apk add git
+        ```
+      </Tab>
+      <Tab title="Void">
+        ```bash
+        sudo xbps-install git
+        ```
+      </Tab>
+    </Tabs>
+
+    Then clone the repository:
+
+    ```bash
+    git clone --depth 1 https://github.com/luanti-org/luanti
+    cd luanti
+    ```
+  </Tab>
+  <Tab title="Without Git">
+    ```bash
+    wget https://github.com/luanti-org/luanti/archive/master.tar.gz
+    tar xf master.tar.gz
+    cd luanti-master
+    ```
+  </Tab>
+</Tabs>
+
+## Build
+
+Build a version that runs directly from the source directory:
+
+```bash
+cmake . -DRUN_IN_PLACE=TRUE
+make -j$(nproc)
+```
+
+Run Luanti:
+
+```bash
+./bin/luanti
+```
+
+Run unit tests to verify your build:
+
+```bash
+./bin/luanti --run-unittests
+```
+
+## Common build variations
+
+| Goal | CMake flag |
+|---|---|
+| System-wide install (e.g. for packaging) | `-DRUN_IN_PLACE=FALSE` |
+| Build a dedicated server only | `-DBUILD_SERVER=TRUE -DBUILD_CLIENT=FALSE` |
+| Debug build (slower but better for debuggers) | `-DCMAKE_BUILD_TYPE=Debug` |
+| See all available options | `cmake . -LH` |
+
+<Tip>
+  Use `-DCMAKE_BUILD_TYPE=Debug` when you want to attach a debugger or investigate crashes. Debug builds produce much more useful output, but run noticeably slower than release builds.
+</Tip>
+
+For a full list of CMake options, see the [compiling overview](/compiling/overview).

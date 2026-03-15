@@ -1,0 +1,282 @@
+---
+title: "Translations"
+description: "Internationalise your mod with Luanti's translation system — create .tr or .po files, use core.get_translator, handle plurals, and transfer translations to clients."
+---
+
+Luanti's translation system lets you provide localised strings for any language. Translations are stored in files in your mod's `locale/` directory and are transferred to clients along with other mod assets. The client resolves translated strings at display time based on the player's language setting.
+
+## How it works
+
+1. You wrap translatable strings in your Lua code using `S()` (from `core.get_translator`).
+2. You place translation files in `<modname>/locale/`.
+3. The engine packages translation files and sends them to connecting clients.
+4. When the client displays a translated string, it looks up the active locale in the appropriate translation file.
+
+Strings that have no matching translation fall back to the original English source string.
+
+## Getting a translator
+
+Call `core.get_translator` once at the top of your mod's `init.lua`:
+
+```lua
+local S, PS = core.get_translator("mymod")
+```
+
+This returns two functions:
+
+- **`S(str, ...)`** — translates `str` using the `mymod` textdomain. Additional arguments replace `@1`, `@2`, … placeholders.
+- **`PS(str, str_plural, n, ...)`** — chooses between singular and plural forms based on `n`, then substitutes arguments.
+
+`core.get_translator(textdomain)` is a convenience wrapper. The underlying functions are:
+
+```lua
+core.translate(textdomain, str, ...)       -- equivalent to S(str, ...)
+core.translate_n(textdomain, str, str_plural, n, ...)  -- equivalent to PS(...)
+```
+
+If `textdomain` is `nil`, it defaults to `""` (the global domain).
+
+## Using `S()` in your mod
+
+```lua
+local S, PS = core.get_translator("mymod")
+
+-- Simple string
+core.register_node("mymod:stone", {
+    description = S("Stone"),
+    -- ...
+})
+
+-- String with arguments
+core.register_on_joinplayer(function(player)
+    local name = player:get_player_name()
+    core.chat_send_player(name,
+        S("Welcome to the server, @1!", name))
+end)
+
+-- Plural form
+core.register_chatcommand("score", {
+    func = function(name)
+        local pts = get_score(name)  -- your function
+        return true, PS(
+            "You have @1 point.",
+            "You have @1 points.",
+            pts,
+            tostring(pts)
+        )
+    end,
+})
+```
+
+## Translation file formats
+
+Luanti supports two translation file formats. Both live in `<modname>/locale/`.
+
+### `.tr` format (simple, legacy)
+
+Files are named `<textdomain>.<lang>.tr`, e.g. `mymod.de.tr`:
+
+```
+# textdomain: mymod
+
+# Lines starting with # are comments.
+# Format: original=translated
+# Use @1, @2, ... for argument placeholders.
+# Use @@ for a literal @, @= for a literal =, @n for a newline.
+
+Stone=Stein
+Welcome to the server, @1!=Willkommen auf dem Server, @1!
+You have @1 point.=Du hast @1 Punkt.
+```
+
+<Note>
+The `.tr` format does **not** support plural forms. Use `.po` files for languages that require multiple plural forms.
+</Note>
+
+### `.po` / `.mo` format (Gettext)
+
+Files are named `<textdomain>.<lang>.po` (source) or `<textdomain>.<lang>.mo` (compiled):
+
+```po
+msgctxt "mymod"
+msgid "Stone"
+msgstr "Stein"
+
+msgctxt "mymod"
+msgid "Welcome to the server, @1!"
+msgstr "Willkommen auf dem Server, @1!"
+```
+
+For plurals, a `.po` file also specifies the plural form rule:
+
+```po
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgctxt "mymod"
+msgid "You have @1 point."
+msgid_plural "You have @1 points."
+msgstr[0] "Du hast @1 Punkt."
+msgstr[1] "Du hast @1 Punkte."
+```
+
+The `msgctxt` field is the textdomain. If `msgctxt` is omitted, the textdomain is inferred from the filename.
+
+## Argument placeholders and escapes
+
+Inside translatable strings:
+
+| Escape | Meaning |
+|--------|---------|
+| `@1` … `@9` | Positional arguments (1-indexed) |
+| `@@` | Literal `@` |
+| `@=` | Literal `=` (only required in `.tr` files) |
+| `@n` | Literal newline (also `@\n`) |
+
+Arguments must appear in increasing order without gaps in the **source string**. They may appear in any order in translated strings:
+
+```lua
+-- Source
+S("@1 attacked @2", attacker_name, victim_name)
+
+-- German translation (reordering is fine in the .tr or .po file)
+-- @1 hat @2 angegriffen  →  or  @2 wurde von @1 angegriffen
+```
+
+## Creating and maintaining translation files
+
+### Generating a template with xgettext
+
+Generate a `.pot` template from your Lua sources:
+
+```bash
+xgettext -L lua \
+  -kS -kPS:1,2 \
+  -kcore.translate:1c,2 \
+  -kcore.translate_n:1c,2,3 \
+  -d mymod \
+  -o locale/mymod.pot \
+  *.lua
+```
+
+Re-run this command whenever you add new translatable strings to update the template.
+
+### Creating a language file
+
+```bash
+msginit -l de -i locale/mymod.pot -o locale/mymod.de.po
+```
+
+Then edit `locale/mymod.de.po` to fill in the translated strings.
+
+### Updating an existing language file
+
+```bash
+msgmerge -U locale/mymod.de.po locale/mymod.pot
+```
+
+This merges new source strings into the existing translation without overwriting existing translations.
+
+### Using `mod_translation_updater.py`
+
+For `.tr` files, the `mod_translation_updater.py` script from the [luanti-org/modtools](https://github.com/luanti-org/modtools) repository can generate and update `.tr` files directly from your Lua sources.
+
+## The `textdomain` field in `mod.conf`
+
+The `textdomain` field in your mod's `mod.conf` sets the textdomain used to translate the mod's own `title` and `description` metadata:
+
+```ini
+name = mymod
+title = My Mod
+description = A mod that does things
+textdomain = mymod
+```
+
+With this configuration, Luanti looks for translations of `"My Mod"` and `"A mod that does things"` in the `mymod` textdomain — for example in `mymod/locale/mymod.fr.tr`:
+
+```
+# textdomain: mymod
+My Mod=Mon Mod
+A mod that does things=Un mod qui fait des choses
+```
+
+For games, set `textdomain` in `game.conf` and place translation files in any mod under the game:
+
+```ini
+description = My Game
+textdomain = mygame
+```
+
+## How translations reach clients
+
+Translation files placed in `<modname>/locale/` are treated like any other mod media asset: when a player connects, the server sends all media files (textures, sounds, translation files) to the client. The client stores them locally and uses them to resolve translated strings.
+
+The `core.translate` output is **not** a plain string. It contains escape sequences that embed the translation lookup key and arguments. This means:
+
+- `string.len` and `string.gsub` will not behave as expected on translated strings.
+- String **concatenation** works fine (e.g. for building formspec strings).
+- Do **not** break a sentence into parts and translate them separately — use arguments instead.
+
+```lua
+-- Wrong: breaking sentences
+S("Hello") .. ", " .. name .. "!"  -- fragile, unnatural in other languages
+
+-- Correct: argument substitution
+S("Hello, @1!", name)
+```
+
+## Server-side translation
+
+Occasionally you need to resolve a translated string on the server — for example, to filter or sort a list of player-visible labels. Use:
+
+```lua
+local lang = core.get_player_information(name).lang_code
+local translated = core.get_translated_string(lang, S("Stone"))
+```
+
+<Warning>
+Only use `core.get_translated_string` for sorting, filtering, or similar non-display purposes. You do **not** need it to make translated strings appear correctly on the client — the client handles translation automatically.
+</Warning>
+
+## Full example
+
+```lua
+-- mymod/init.lua
+local S, PS = core.get_translator("mymod")
+
+core.register_node("mymod:ore", {
+    description = S("Magic Ore"),
+    tiles       = {"mymod_ore.png"},
+    groups      = {cracky = 2},
+})
+
+core.register_on_joinplayer(function(player)
+    local name = player:get_player_name()
+    core.chat_send_player(name, S("Welcome back, @1!", name))
+end)
+
+core.register_chatcommand("ores", {
+    description = S("Show your ore count"),
+    func = function(name)
+        local count = get_ore_count(name)  -- your function
+        return true, PS(
+            "You have mined @1 ore.",
+            "You have mined @1 ores.",
+            count,
+            tostring(count)
+        )
+    end,
+})
+```
+
+```
+# mymod/locale/mymod.de.tr
+# textdomain: mymod
+
+Magic Ore=Magisches Erz
+Welcome back, @1!=Willkommen zurück, @1!
+Show your ore count=Zeige deine Erzzahl
+You have mined @1 ore.=Du hast @1 Erz abgebaut.
+You have mined @1 ores.=Du hast @1 Erze abgebaut.
+```

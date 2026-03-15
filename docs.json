@@ -1,122 +1,171 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Luanti",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#d3b656",
+    "light": "#518537",
+    "dark": "#f0f0f0"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/images/logo.png",
+  "logo": {
+    "light": "/images/logo.png",
+    "dark": "/images/logo.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/luanti-org/luanti"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/luanti-org/luanti"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Getting Started",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Introduction",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "controls"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Building from Source",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "compiling/overview",
+              "compiling/linux",
+              "compiling/windows",
+              "compiling/macos"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Configuration",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "configuration/config-file",
+              "configuration/command-line",
+              "configuration/paths"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Modding & Games",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core Concepts",
             "pages": [
-              "api-reference/introduction"
+              "modding/overview",
+              "modding/mod-structure",
+              "modding/naming-conventions",
+              "modding/modpacks"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Game Creation",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "games/overview",
+              "games/game-conf",
+              "games/menu-images"
+            ]
+          },
+          {
+            "group": "Lua Scripting",
+            "pages": [
+              "modding/lua-basics",
+              "modding/registering-content",
+              "modding/nodes",
+              "modding/items",
+              "modding/entities",
+              "modding/mapgen"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "modding/formspecs",
+              "modding/hud",
+              "modding/networking",
+              "modding/textures",
+              "modding/sounds",
+              "modding/translations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Server Lua API",
+            "pages": [
+              "api/lua-api-overview",
+              "api/core-namespace",
+              "api/nodes",
+              "api/items",
+              "api/players",
+              "api/entities",
+              "api/mapgen-api",
+              "api/settings",
+              "api/callbacks"
+            ]
+          },
+          {
+            "group": "Client Lua API",
+            "pages": [
+              "api/client-api-overview",
+              "api/client-callbacks",
+              "api/client-functions"
+            ]
+          },
+          {
+            "group": "Main Menu API",
+            "pages": [
+              "api/mainmenu-api"
+            ]
+          },
+          {
+            "group": "World Format",
+            "pages": [
+              "api/world-format"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Server & Deployment",
+        "groups": [
+          {
+            "group": "Running a Server",
+            "pages": [
+              "server/overview",
+              "server/configuration",
+              "server/privileges",
+              "server/worlds"
+            ]
+          },
+          {
+            "group": "Docker",
+            "pages": [
+              "server/docker"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/code-style",
+              "contributing/profiling"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

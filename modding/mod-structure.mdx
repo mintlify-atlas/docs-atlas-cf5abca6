@@ -1,0 +1,299 @@
+---
+title: "Mod Directory Structure"
+description: "The full layout of a Luanti mod directory, mod.conf keys, accepted media formats, and the settingtypes.txt format."
+---
+
+Every Luanti mod lives in its own directory. The directory name is typically the mod name, though the authoritative name comes from `mod.conf`. Understanding the structure helps you organize your mod's files correctly and ensures the engine can discover your assets.
+
+## Directory layout
+
+```
+mods
+├── modname
+│   ├── mod.conf
+│   ├── screenshot.png
+│   ├── settingtypes.txt
+│   ├── init.lua
+│   ├── models
+│   ├── textures
+│   │   ├── modname_stuff.png
+│   │   ├── modname_something_else.png
+│   │   ├── subfolder_foo
+│   │   │   ├── modname_more_stuff.png
+│   │   │   └── another_subfolder
+│   │   └── bar_subfolder
+│   ├── sounds
+│   ├── fonts
+│   ├── media
+│   ├── locale
+│   └── <custom data>
+└── another
+```
+
+<Note>
+Use `core.get_modpath(modname)` to get the absolute filesystem path to any mod's directory at runtime.
+</Note>
+
+## init.lua
+
+`init.lua` is the entry point for your mod. The engine runs this file during server startup. Your `init.lua` should register everything the mod needs — nodes, items, entities, craftrecipes, callbacks, and so on. Subsequent execution happens through the callbacks you register, not through continuous execution of `init.lua`.
+
+```lua
+-- init.lua: register a node and a crafting recipe
+core.register_node("mymod:myblock", {
+    description = "My Block",
+    tiles = {"mymod_myblock.png"},
+    groups = {cracky = 2},
+})
+
+core.register_craft({
+    output = "mymod:myblock",
+    recipe = {
+        {"default:stone", "default:stone", "default:stone"},
+    },
+})
+```
+
+## mod.conf
+
+`mod.conf` is a key-value settings file that provides metadata about the mod. Luanti reads it to determine the mod's name, dependencies, and display information.
+
+```ini
+name = mymod
+title = My Mod
+description = Adds custom blocks and items to the game.
+depends = default
+optional_depends = farming, moreores
+author = YourContentDBUsername
+```
+
+### mod.conf keys
+
+<Accordion title="name">
+The mod's internal name. This allows Luanti to determine the mod name even if the folder is named differently. Use only lowercase letters, digits, and underscores.
+
+```ini
+name = mymod
+```
+</Accordion>
+
+<Accordion title="title">
+A human-readable title shown in the Mods tab of the main menu. Supports translation via the `textdomain` key.
+
+```ini
+title = My Mod
+```
+</Accordion>
+
+<Accordion title="description">
+A short description shown in the Mods tab of the main menu. Supports translation.
+
+```ini
+description = Adds new ores, tools, and biomes to the game.
+```
+</Accordion>
+
+<Accordion title="depends">
+A comma-separated list of mods that must be loaded before this mod. If any listed mod is missing, this mod fails to load.
+
+```ini
+depends = default, doors
+```
+</Accordion>
+
+<Accordion title="optional_depends">
+A comma-separated list of optional dependencies. These mods are loaded before yours if they exist, but their absence does not prevent your mod from loading.
+
+```ini
+optional_depends = farming, moreores, intllib
+```
+</Accordion>
+
+<Accordion title="author">
+The author's ContentDB username. Used for attribution and ContentDB integration.
+
+```ini
+author = rubenwardy
+```
+</Accordion>
+
+<Accordion title="release">
+An internal ID set exclusively by ContentDB to track published versions. Do not set this manually.
+</Accordion>
+
+<Accordion title="textdomain">
+The translation text domain used to translate `title` and `description`. Defaults to the mod name.
+
+```ini
+textdomain = mymod
+```
+</Accordion>
+
+### Deprecated files
+
+<Warning>
+The following files are deprecated. Use `mod.conf` instead.
+</Warning>
+
+- **`depends.txt`** — Previously used to list required and optional dependencies. Optional dependencies were indicated by appending `?` to the mod name.
+- **`description.txt`** — Previously used to provide the mod description.
+
+## screenshot.png
+
+A preview image shown in the mod manager inside the main menu. Provide it as `screenshot.png`, `screenshot.jpg`, or `screenshot.jpeg`. It should have an aspect ratio of **3:2** and a minimum size of **300×200 pixels**.
+
+## Media directories
+
+The `textures`, `sounds`, `media`, `models`, `locale`, and `fonts` directories hold assets that the engine transfers to connecting clients.
+
+### Naming rules
+
+Media file names may only contain these characters:
+
+```
+a-zA-Z0-9_.-
+```
+
+Prefix your files with your mod name to avoid conflicts with other mods:
+
+```
+mymod_stone.png
+mymod_ambient.ogg
+mymod_chest.b3d
+```
+
+### Accepted formats
+
+<Tabs>
+  <Tab title="Images">
+    Accepted formats: `.png`, `.jpg`, `.tga`
+
+    Luanti uses nearest-neighbor upscaling to preserve the crisp look of pixel art. Textures smaller than 192px are not filtered even when the user enables bilinear or trilinear filtering.
+
+    Prefix texture file names with the mod name:
+    ```
+    mymod_stone.png
+    mymod_grass_side.png
+    ```
+  </Tab>
+  <Tab title="Sounds">
+    Accepted format: `.ogg` (Ogg Vorbis only)
+
+    For positional audio, use **mono** (single-channel) files. Stereo files are played non-positionally by OpenAL.
+
+    Luanti supports **sound groups**: if you name files `mysound.ogg`, `mysound.1.ogg`, `mysound.2.ogg`, etc., the engine picks one at random when the group name `mysound` is played.
+
+    ```
+    mymod_footstep.ogg
+    mymod_explosion.1.ogg
+    mymod_explosion.2.ogg
+    ```
+  </Tab>
+  <Tab title="Models">
+    Accepted formats: `.x`, `.b3d`, `.obj`, `.gltf`, `.glb` (glTF/GLB since version 5.10)
+
+    Supported features:
+    - Simple textured meshes with multiple textures, optionally with normals.
+    - The `.x`, `.b3d`, and `.gltf` formats support a single animation.
+
+    Binary glTF (`.glb`) is recommended over `.gltf` for smaller file sizes.
+
+    <Note>
+    The engine cannot handle files over ~16 MB. Keep media files as small as reasonably possible.
+    </Note>
+
+    Files not in an accepted format (e.g. `.blend` source files) are not sent to clients, so you can store them in the mod directory safely.
+  </Tab>
+  <Tab title="Fonts">
+    Accepted formats: `.ttf` (TrueType Font), `.woff` (Web Open Font Format) — both since version 5.11.
+
+    `.woff` is preferred due to its compression. Currently, fonts can only override Luanti's default fonts. Place font files using these reserved stem names:
+
+    | Filename stem | Variant |
+    |---|---|
+    | `regular` | Regular |
+    | `bold` | Bold |
+    | `italic` | Italic |
+    | `bold_italic` | Bold italic |
+    | `mono` | Monospaced regular |
+    | `mono_bold` | Monospaced bold |
+    | `mono_italic` | Monospaced italic |
+    | `mono_bold_italic` | Monospaced bold italic |
+
+    <Warning>
+    The Luanti client only reads kerning from the older OpenType `kern` table, not the modern `GPOS` table. Some modern fonts may not render correctly.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Subfolders
+
+Media directories can contain subfolders. Subfolders whose names start with `_` or `.` are ignored. If a subfolder contains a file with the same name as a file in a parent directory, the parent's file takes precedence.
+
+<Warning>
+Although it is possible, avoid overwriting media files from other mods unless your mod explicitly depends on them. Overwriting is only supported for mods that are listed as dependencies.
+</Warning>
+
+## settingtypes.txt
+
+`settingtypes.txt` exposes your mod's configurable settings in the **Mods** category of the advanced settings dialog. Read settings at runtime using `core.settings`.
+
+### Format
+
+Each setting follows this general pattern:
+
+```
+name (Readable name) type type_args
+```
+
+Comments placed directly above a setting are shown as help text in the UI.
+
+### Setting types
+
+| Type | Example |
+|---|---|
+| `int` | `mymod_spawn_interval (Spawn interval) int 30 1 600` |
+| `float` | `mymod_speed_factor (Speed factor) float 1.0 0.1 5.0` |
+| `bool` | `mymod_enable_feature (Enable feature) bool false` |
+| `string` | `mymod_greeting (Greeting message) string Hello!` |
+| `enum` | `mymod_mode (Mode) enum easy easy,normal,hard` |
+| `flags` | `mymod_options (Options) flags fast fast,pretty,safe` |
+| `v3f` | `mymod_offset (Offset) v3f (0.0, 0.0, 0.0)` |
+| `noise_params_2d` | Two-dimensional noise parameter set |
+| `noise_params_3d` | Three-dimensional noise parameter set |
+
+Type arguments vary by type:
+
+- **`int` / `float`**: `default`, or `default min`, or `default min max`
+- **`bool`**: `default` (`true` or `false`)
+- **`string`**: optional `default` (empty string if omitted)
+- **`enum`**: `default value1,value2,...`
+- **`flags`**: `default possible_flag1,possible_flag2,...`
+
+### Example settingtypes.txt
+
+```ini
+# How often (in seconds) to attempt mob spawning.
+# Lower values increase server load.
+mymod_spawn_interval (Spawn interval) int 30 1 600
+
+# Multiplier applied to mob movement speed.
+mymod_speed_factor (Speed factor) float 1.0 0.1 5.0
+
+# Enable experimental features.
+mymod_experimental (Enable experimental features) bool false
+
+# Difficulty preset.
+mymod_difficulty (Difficulty) enum normal easy,normal,hard
+```
+
+### Reading settings in Lua
+
+```lua
+local interval = tonumber(core.settings:get("mymod_spawn_interval")) or 30
+local experimental = core.settings:get_bool("mymod_experimental", false)
+```
+
+## locale directory
+
+The `locale` directory holds translation files for client-side strings. Translation files follow the format `<textdomain>.<lang>.tr`. See the [Translations](https://docs.luanti.org/) section of the API reference for full details.

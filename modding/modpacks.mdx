@@ -1,0 +1,210 @@
+---
+title: "Modpacks"
+description: "How to bundle multiple Luanti mods into a modpack, configure modpack.conf, and manage dependencies between mods in a pack."
+---
+
+A **modpack** is a collection of mods grouped together in a single directory. Modpacks make it easy to distribute, install, and manage a set of related mods as one unit. Players and server operators install a modpack just like a single mod.
+
+## How modpacks work
+
+Luanti detects a modpack by the presence of a `modpack.conf` file in a directory that would otherwise be treated as a mod. When the engine finds `modpack.conf`, it treats the directory as a container and loads each subdirectory inside it as an individual mod.
+
+```
+mods
+└── mymodpack          ← modpack directory
+    ├── modpack.conf   ← signals this is a modpack, not a mod
+    ├── mymod_core
+    │   ├── mod.conf
+    │   └── init.lua
+    ├── mymod_items
+    │   ├── mod.conf
+    │   └── init.lua
+    └── mymod_world
+        ├── mod.conf
+        └── init.lua
+```
+
+Each subdirectory is a fully independent mod with its own `mod.conf`, `init.lua`, textures, and other assets. The modpack directory itself contains no Lua code.
+
+## modpack.conf
+
+`modpack.conf` is a key-value settings file that provides metadata about the modpack. Its format is identical to `mod.conf`.
+
+```ini
+name = mymodpack
+title = My Mod Pack
+description = A collection of mods that adds new ores, tools, and biomes.
+author = YourContentDBUsername
+```
+
+### modpack.conf keys
+
+<Accordion title="name">
+The modpack's internal name. Lets Luanti identify the modpack even if the directory has been renamed.
+
+```ini
+name = mymodpack
+```
+</Accordion>
+
+<Accordion title="title">
+A human-readable title shown in the Mods tab of the main menu. Supports translation via the `textdomain` key.
+
+```ini
+title = My Mod Pack
+```
+</Accordion>
+
+<Accordion title="description">
+A short description displayed in the Mods tab of the main menu. Supports translation.
+
+```ini
+description = Adds new ores, tools, biomes, and mobs to your world.
+```
+</Accordion>
+
+<Accordion title="author">
+The author's ContentDB username. Used for attribution and ContentDB integration.
+
+```ini
+author = rubenwardy
+```
+</Accordion>
+
+<Accordion title="release">
+An internal version ID set exclusively by ContentDB. Do not set this manually.
+</Accordion>
+
+<Accordion title="textdomain">
+The translation text domain used to translate `title` and `description`. Defaults to the modpack name.
+
+```ini
+textdomain = mymodpack
+```
+</Accordion>
+
+## Organizing mods in a modpack
+
+Because each subdirectory in a modpack is treated as a standalone mod, you organize them exactly as you would any other mod.
+
+<Steps>
+  <Step title="Create the modpack directory">
+    Create a directory with your modpack's name. This name should follow the same conventions as mod names: `a-zA-Z0-9_`.
+
+    ```bash
+    mkdir mymodpack
+    ```
+  </Step>
+  <Step title="Add modpack.conf">
+    Create `modpack.conf` in the modpack root with at minimum a `name` field.
+
+    ```ini
+    name = mymodpack
+    title = My Mod Pack
+    description = A collection of related mods.
+    author = YourContentDBUsername
+    ```
+  </Step>
+  <Step title="Create mod subdirectories">
+    Add each mod as a subdirectory. Every mod must have its own `mod.conf` and `init.lua`.
+
+    ```
+    mymodpack/
+    ├── modpack.conf
+    ├── mymodpack_api/
+    │   ├── mod.conf
+    │   └── init.lua
+    ├── mymodpack_nodes/
+    │   ├── mod.conf
+    │   ├── init.lua
+    │   └── textures/
+    └── mymodpack_tools/
+        ├── mod.conf
+        ├── init.lua
+        └── textures/
+    ```
+  </Step>
+  <Step title="Define dependencies">
+    Declare dependencies between mods using the `depends` and `optional_depends` keys in each mod's `mod.conf`.
+  </Step>
+</Steps>
+
+## Dependencies between mods in a modpack
+
+Mods inside a modpack depend on each other using the same mechanism as any other mods: the `depends` and `optional_depends` keys in `mod.conf`. There is no special modpack-level dependency syntax.
+
+<Tabs>
+  <Tab title="Required dependency">
+    Use `depends` when a mod cannot function without another. If the dependency is missing, the dependent mod fails to load.
+
+    ```ini
+    # mymodpack_tools/mod.conf
+    name = mymodpack_tools
+    title = My Mod Pack Tools
+    depends = mymodpack_api, default
+    ```
+
+    In Lua, you can use the API provided by the dependency immediately:
+
+    ```lua
+    -- mymodpack_tools/init.lua
+    -- mymodpack_api is guaranteed to have loaded first
+    mymodpack_api.register_tool("mymodpack_tools:pickaxe", {
+        description = "My Pickaxe",
+    })
+    ```
+  </Tab>
+  <Tab title="Optional dependency">
+    Use `optional_depends` when your mod can function without another, but will add extra content or integrate with it if available.
+
+    ```ini
+    # mymodpack_nodes/mod.conf
+    name = mymodpack_nodes
+    title = My Mod Pack Nodes
+    depends = mymodpack_api
+    optional_depends = farming, moreores
+    ```
+
+    In Lua, check whether an optional dependency loaded before using it:
+
+    ```lua
+    -- mymodpack_nodes/init.lua
+    if core.get_modpath("farming") then
+        -- Register farming-compatible nodes
+        core.register_node("mymodpack_nodes:fertile_soil", {
+            description = "Fertile Soil",
+            tiles = {"mymodpack_fertile_soil.png"},
+            groups = {soil = 3, crumbly = 3},
+        })
+    end
+    ```
+  </Tab>
+</Tabs>
+
+### Dependency resolution
+
+Luanti resolves the full dependency graph across all active mods before loading any of them. Mods are loaded in topological order: if mod A depends on mod B, mod B always loads first, regardless of whether they are in the same modpack or installed separately.
+
+<Note>
+Mods within a modpack have no inherent load-order advantage over external mods. Always declare your dependencies explicitly in `mod.conf`.
+</Note>
+
+## Installing a modpack
+
+Install a modpack the same way you install a regular mod — place the modpack directory in your mods folder:
+
+```
+~/.minetest/mods/mymodpack/
+```
+
+The main menu's Mods tab shows the modpack as a single entry. You can expand it to enable or disable individual mods within the pack.
+
+## Modpack vs. individual mods
+
+| Feature | Modpack | Individual mod |
+|---|---|---|
+| Directory contains | Other mod directories | Lua scripts and assets |
+| `modpack.conf` | Required | Not present |
+| `init.lua` in root | Not used | Required |
+| Distribution | Single archive for multiple mods | Single archive for one mod |
+| ContentDB | Supported | Supported |

@@ -1,0 +1,646 @@
+---
+title: "World Format"
+description: "Specification of the Luanti world format, covering file structure, authentication data, map database layout, block serialization, player files, and inventory encoding."
+---
+
+This page documents the Luanti world format for block serialization versions 22 through 29. The format was introduced around `0.4.dev-20120322` and version 29 was added in `5.5.0-dev`.
+
+<Note>
+The block serialization version does not fully specify every aspect of the format. When checking compliance, you must verify that the files and data actually match the expected layout.
+</Note>
+
+---
+
+## World Directory Structure
+
+A world is a directory. The directory name is freeform and typically serves as the world's display name.
+
+```
+World/
+├── auth.txt         Authentication data (text format)
+├── auth.sqlite      Authentication data (SQLite alternative)
+├── env_meta.txt     Environment metadata
+├── ipban.txt        Banned IPs and usernames
+├── map_meta.txt     Map metadata
+├── map.sqlite       Map data
+├── players/         Player directory
+│   ├── player1      Player file
+│   └── Foo          Player file
+└── world.mt         World metadata
+```
+
+---
+
+## `world.mt` — World Metadata
+
+Key-value text file containing world configuration.
+
+```ini
+gameid = mesetint
+enable_damage = true
+creative_mode = false
+backend = sqlite3
+player_backend = sqlite3
+readonly_backend = sqlite3
+auth_backend = files
+mod_storage_backend = sqlite3
+server_announce = false
+load_mod_mymod = false
+world_name = Sol III
+```
+
+<ResponseField name="gameid" type="string">
+  The game ID this world belongs to.
+</ResponseField>
+
+<ResponseField name="enable_damage" type="boolean">
+  Whether player damage is enabled.
+</ResponseField>
+
+<ResponseField name="creative_mode" type="boolean">
+  Whether creative mode is enabled.
+</ResponseField>
+
+<ResponseField name="backend" type="string">
+  Database backend for map blocks. Options: `sqlite3`, `dummy`, `leveldb`, `redis`, `postgresql`.
+</ResponseField>
+
+<ResponseField name="player_backend" type="string">
+  Database backend for player data.
+</ResponseField>
+
+<ResponseField name="readonly_backend" type="string">
+  Optional read-only seed database. The DB file must be in a `readonly/` subfolder.
+</ResponseField>
+
+<ResponseField name="auth_backend" type="string">
+  Backend for authentication. Options: `files` (auth.txt), `sqlite3` (auth.sqlite).
+</ResponseField>
+
+<ResponseField name="mod_storage_backend" type="string">
+  Backend for mod storage data.
+</ResponseField>
+
+<ResponseField name="server_announce" type="boolean">
+  Whether the server is publicly announced.
+</ResponseField>
+
+<ResponseField name="load_mod_<mod>" type="string">
+  Whether to load `<mod>` in this world. Values:
+  - `false` — do not load
+  - `true` — load from wherever it is found
+  - `mods/modpack/moddir` — relative path to the mod (under `mods/`, `share/`, or an absolute path inside `LUANTI_MOD_PATH`)
+</ResponseField>
+
+<ResponseField name="world_name" type="string">
+  Human-readable name shown in the main menu. Falls back to the folder name if not set.
+</ResponseField>
+
+### PostgreSQL settings
+
+```ini
+pgsql_connection             = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+pgsql_player_connection      = host=127.0.0.1 port=5432 ...
+pgsql_readonly_connection    = host=127.0.0.1 port=5432 ...
+pgsql_auth_connection        = host=127.0.0.1 port=5432 ...
+pgsql_mod_storage_connection = host=127.0.0.1 port=5432 ...
+```
+
+### Redis settings
+
+```ini
+redis_address  = 127.0.0.1
+redis_hash     = foo
+redis_port     = 6379      # optional
+redis_password = hunter2   # optional
+```
+
+---
+
+## `auth.txt` — Authentication (Text)
+
+One player per line:
+
+```
+<name>:<password hash>:<privilege1,privilege2,...>
+```
+
+### Password hash formats
+
+**Legacy (before 0.4.13):** SHA1 of `<name><password>`, encoded in base64.
+
+**Current (since 0.4.13):** `#1#<salt>#<verifier>` where `<salt>` and `<verifier>` are base64-encoded. The verifier is RFC 2945 compatible SRP using the 2048-bit group from RFC 5054 and SHA-256.
+
+### Examples
+
+```
+# Player "celeron55", no password, privileges "interact" and "shout":
+celeron55::interact,shout
+
+# Player "foo", password "bar", legacy hash:
+foo:iEPX+SQWIR3p67lj/0zigSWTKHg:shout
+
+# Player "bar", no password, no privileges:
+bar::
+```
+
+---
+
+## `auth.sqlite` — Authentication (SQLite)
+
+Used when `auth_backend = sqlite3` in `world.mt`. Contains two tables:
+
+```sql
+CREATE TABLE `auth` (
+    `id`         INTEGER PRIMARY KEY AUTOINCREMENT,
+    `name`       VARCHAR(32) UNIQUE,
+    `password`   VARCHAR(512),
+    `last_login` INTEGER
+);
+
+CREATE TABLE `user_privileges` (
+    `id`        INTEGER,
+    `privilege` VARCHAR(32),
+    PRIMARY KEY (id, privilege),
+    CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES auth (id) ON DELETE CASCADE
+);
+```
+
+- `name` and `password` use the same format as `auth.txt` (modern hash).
+- `last_login` is a Unix timestamp.
+- Each privilege is a separate row in `user_privileges`.
+
+---
+
+## `env_meta.txt` — Environment Metadata
+
+Simple key-value file for global environment state:
+
+```
+game_time = 73471
+time_of_day = 19118
+EnvArgsEnd
+```
+
+---
+
+## `map_meta.txt` — Map Metadata
+
+Stores the map seed and other global map variables:
+
+```
+seed = 7980462765762429666
+[end_of_params]
+```
+
+---
+
+## `ipban.txt` — IP Bans
+
+One entry per line in the format `<IP>|<username>`:
+
+```
+123.456.78.9|foo
+123.456.78.10|bar
+```
+
+---
+
+## `map.sqlite` — Map Data
+
+An SQLite3 database containing all map blocks.
+
+### Schema (since 5.12.0)
+
+```sql
+CREATE TABLE `blocks` (
+    `x`    INTEGER,
+    `y`    INTEGER,
+    `z`    INTEGER,
+    `data` BLOB NOT NULL,
+    PRIMARY KEY (`x`, `z`, `y`)
+);
+```
+
+### Schema (before 5.12.0)
+
+```sql
+CREATE TABLE `blocks` (`pos` INT NOT NULL PRIMARY KEY, `data` BLOB);
+```
+
+### Position encoding (pre-5.12.0)
+
+In the old schema the three block coordinates are packed into a single integer:
+
+```c
+pos = (z << 24) + (y << 12) + x;
+// Equivalently:
+pos = (z * 0x1000000) + (y * 0x1000) + x;
+```
+
+Decoding:
+
+```c
+pos = pos + 0x800800800;
+x = (pos & 0xFFF) - 0x800;
+y = ((pos >> 12) & 0xFFF) - 0x800;
+z = ((pos >> 24) & 0xFFF) - 0x800;
+```
+
+To retrieve all blocks in a coordinate range using the old schema:
+
+```sql
+SELECT
+    `pos`, `data`,
+    ( (`pos` + 0x800800800)        & 0xFFF) - 0x800 AS x,
+    (((`pos` + 0x800800800) >> 12) & 0xFFF) - 0x800 AS y,
+    (((`pos` + 0x800800800) >> 24) & 0xFFF) - 0x800 AS z
+FROM `blocks`
+WHERE
+    ( (`pos` + 0x800800800)        & 0xFFF) - 0x800 >= ? AND  -- minx
+    ( (`pos` + 0x800800800)        & 0xFFF) - 0x800 <= ? AND  -- maxx
+    (((`pos` + 0x800800800) >> 12) & 0xFFF) - 0x800 >= ? AND  -- miny
+    (((`pos` + 0x800800800) >> 12) & 0xFFF) - 0x800 <= ? AND  -- maxy
+    `pos` >= (? << 24) - 0x800800 AND  -- minz
+    `pos` <= (? << 24) + 0x7FF7FF;     -- maxz
+```
+
+---
+
+## MapBlock Serialization Format
+
+Each `data` blob in `map.sqlite` is a serialized `MapBlock` — a 16×16×16 cube of nodes.
+
+<Note>
+All multi-byte integers use **big-endian** (MSB first) byte order. Since version 29, the entire block (except the version byte) is compressed with **zstd** after serialization. Versions 22–28 use zlib compression on individual sections.
+</Note>
+
+### Block header
+
+| Field | Type | Description |
+|---|---|---|
+| `version` | `u8` | Map format version number |
+| `flags` | `u8` | Block flags (see below) |
+| `lighting_complete` | `u16` | Added in version 27. 12-bit lighting validity flags |
+
+### Flags bitmask
+
+<ResponseField name="0x01 is_underground" type="bit">
+  Set to `0` when there are no light obstructions above the block. Used when recalculating sunlight with no block above.
+</ResponseField>
+
+<ResponseField name="0x02 day_night_differs" type="bit">
+  Set when the block's lighting differs between day and night. Only these blocks are updated during day/night transitions.
+</ResponseField>
+
+<ResponseField name="0x04 lighting_expired" type="bit">
+  Unused since version 27. Previously indicated that lighting was invalid and needed recalculation.
+</ResponseField>
+
+<ResponseField name="0x08 generated" type="bit">
+  Set when the block has been generated. If `false`, the block is mostly `CONTENT_IGNORE` and may contain fragments of neighboring trees.
+</ResponseField>
+
+### `lighting_complete` (version 27+)
+
+Contains 12 flags, one per block face direction, indicating whether lighting is correct on each side:
+
+```
+Bit layout (MSB → LSB):
+nothing, nothing, nothing, nothing,
+night X-, night Y-, night Z-, night Z+, night Y+, night X+,
+day X-,  day Y-,  day Z-,  day Z+,  day Y+,  day X+
+```
+
+The `nothing` bits should always be set (reserved for future use).
+
+---
+
+### Timestamp and Name-ID Mapping (version 29+)
+
+In version 29 these fields appear **immediately after the header**, before node data:
+
+| Field | Type | Description |
+|---|---|---|
+| `timestamp` | `u32` | Seconds since game start when last saved. `0xffffffff` = unknown |
+| `name_id_mapping_version` | `u8` | Always `0` for version 29 |
+| `num_name_id_mappings` | `u16` | Number of entries |
+
+For each mapping entry:
+
+| Field | Type |
+|---|---|
+| `id` | `u16` |
+| `name_len` | `u16` |
+| `name` | `u8[name_len]` |
+
+---
+
+### Content and Params Width
+
+| Field | Type | Description |
+|---|---|---|
+| `content_width` | `u8` | Bytes per `param0` field: `1` before version 24, `2` since |
+| `params_width` | `u8` | Bytes for `param1`+`param2` per node: always `2` |
+
+---
+
+### Node Data
+
+<Note>
+Node data is zlib-compressed in versions before 29.
+</Note>
+
+The 4096 nodes in a block (16×16×16) are stored as three flat arrays. Node at position `(x, y, z)` is at index `z*256 + y*16 + x`.
+
+**`content_width` = 1:**
+```
+u8[4096]   param0   (content ID)
+u8[4096]   param1
+u8[4096]   param2
+```
+
+**`content_width` = 2:**
+```
+u16[4096]  param0   (content ID)
+u8[4096]   param1
+u8[4096]   param2
+```
+
+#### Node field meanings
+
+- **`param0`** — the content (node type) ID, mapped to names via the Name-ID Mapping
+- **`param1`** — typically used for lighting
+- **`param2`** — purpose depends on the node's `paramtype2`
+
+**Content ID resolution (before version 24):**
+```
+if param0 < 0x80:
+    content_id = param0
+else:
+    content_id = (param0 << 4) | (param2 >> 4)
+```
+
+**Content ID resolution (since version 24):** `content_id = param0` directly.
+
+---
+
+### Node Metadata List
+
+<Note>
+Node metadata is zlib-compressed in versions before 29.
+</Note>
+
+**Before version 23:**
+
+```
+u16   version (always 1)
+u16   count
+for each count:
+    u16   position  (z*256 + y*16 + x)
+    u16   type_id
+    u16   content_size
+    u8[content_size]  content
+```
+
+**Since version 23 (metadata format v1, before version 28):**
+
+```
+u8    version (= 1)
+u16   count
+for each count:
+    u16   position
+    u32   num_vars
+    for each num_vars:
+        u16   key_len
+        u8[key_len]   key
+        u32   val_len
+        u8[val_len]   value
+    serialized inventory
+```
+
+**Since version 28 (metadata format v2):** same as above, with an additional `u8 is_private` flag after each value (`0` = not private, `1` = private).
+
+---
+
+### Node Timers
+
+**Version 23:** `u8` unused version byte (always `0`).
+
+**Version 24 (never released as stable):**
+
+```
+u8   nodetimer_version
+if nodetimer_version == 1:
+    u16  num_of_timers
+    for each:
+        u16  position  (z*256 + y*16 + x)
+        s32  timeout * 1000
+        s32  elapsed * 1000
+```
+
+**Since version 25:**
+
+```
+u8   length of single timer data (always 10)
+u16  num_of_timers
+for each:
+    u16  position
+    s32  timeout * 1000
+    s32  elapsed * 1000
+```
+
+---
+
+### Static Objects
+
+Static objects are persistent freely-moving entities stored inside a map block.
+
+```
+u8   static object version (always 0)
+u16  static_object_count
+
+for each object:
+    u8   type  (1=test, 7=LuaEntity)
+    s32  pos_x * 10000
+    s32  pos_y * 10000
+    s32  pos_z * 10000
+    u16  data_size
+    u8[data_size]  data
+```
+
+**LuaEntity (`type=7`) data:**
+
+```
+u8   compatibility_byte  (always 1)
+u16  name_len
+u8[name_len]  entity name
+u32  static_data_len
+u8[static_data_len]  static data
+s16  hp
+s32  velocity.x * 10000
+s32  velocity.y * 10000
+s32  velocity.z * 10000
+s32  yaw * 1000
+
+# Since protocol version 37:
+u8   version2  (1 or 2)
+s32  pitch * 1000
+s32  roll * 1000
+# if version2 >= 2:
+u8[16]  guid
+```
+
+---
+
+### Timestamp and Name-ID Mapping (before version 29)
+
+In versions 22–28 these fields appear **after** the static objects section:
+
+```
+u32  timestamp
+u8   name_id_mapping version (always 0)
+u16  num_name_id_mappings
+for each:
+    u16  id
+    u16  name_len
+    u8[name_len]  name
+```
+
+---
+
+## Name-ID Mapping
+
+The name-ID mapping translates numeric content IDs in node data to node name strings (e.g. `"default:stone"`). This allows the node type numbering to change across game versions without invalidating stored map data.
+
+---
+
+## Player File Format
+
+Player files live in the `players/` directory. The filename can be anything.
+
+<Note>
+Player position is stored in **nodes × 10** (fixed-point with 1 decimal place of precision).
+</Note>
+
+```
+hp = 11
+name = celeron55
+pitch = 39.77
+position = (-5231.97,15,1961.41)
+version = 1
+yaw = 101.37
+PlayerArgsEnd
+List main 32
+Item default:torch 13
+Item default:pick_steel 1 50112
+...
+Empty
+EndInventoryList
+List craft 9
+Empty
+...
+EndInventoryList
+EndInventory
+```
+
+---
+
+## Inventory Serialization Format
+
+Inventories are serialized in a line-based text format. The newline character is `\n`.
+
+- Every serialized inventory ends with `EndInventory\n`.
+- All slots in a list must always be serialized.
+
+### Item serialization
+
+Current format:
+```
+default:dirt 5
+"default:apple" 2
+default:pick_wood 21323
+```
+
+Older formats (still accepted for reading):
+```
+node "default:dirt" 5
+NodeItem default:dirt 5
+ToolItem WPick 21323
+```
+
+Tool wear is stored as a number between `0` and `65535`.
+
+### Example inventory
+
+```
+List foo 4
+Item default:sapling
+Item default:sword_stone 1 10647
+Item default:dirt 99
+Empty
+EndInventoryList
+List bar 9
+Empty
+Empty
+Empty
+Empty
+Empty
+Empty
+Empty
+Empty
+Empty
+EndInventoryList
+EndInventory
+```
+
+---
+
+## Node Metadata Format (before version 23)
+
+Node metadata was type-dispatched by `type_id`:
+
+<Accordion title="type_id = 1: Generic metadata">
+
+```
+serialized inventory
+u32   len; u8[len]  text
+u16   len; u8[len]  owner
+u16   len; u8[len]  infotext
+u16   len; u8[len]  inventory_drawspec
+u8    allow_text_input
+u8    removal_disabled
+u8    enforce_owner
+u32   num_vars
+for each num_vars:
+    u16  len; u8[len]  name
+    u32  len; u8[len]  value
+```
+
+</Accordion>
+
+<Accordion title="type_id = 14: Sign metadata">
+
+```
+u16  text_len
+u8[text_len]  text
+```
+
+</Accordion>
+
+<Accordion title="type_id = 15: Chest metadata">
+
+```
+serialized inventory
+```
+
+</Accordion>
+
+<Accordion title="type_id = 17: Locked Chest metadata">
+
+```
+u16  len; u8[len]  owner
+serialized inventory
+```
+
+</Accordion>

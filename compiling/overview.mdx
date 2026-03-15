@@ -1,0 +1,155 @@
+---
+title: "Compiling overview"
+description: "CMake options and general information for building Luanti from source on any platform."
+---
+
+Luanti uses CMake as its build system. Before compiling, choose the right guide for your platform:
+
+<CardGroup cols={3}>
+  <Card title="Linux" icon="linux" href="/compiling/linux">
+    Build on Debian, Fedora, Arch, Alpine, Void, and openSUSE.
+  </Card>
+  <Card title="Windows" icon="windows" href="/compiling/windows">
+    Build with MSVC and vcpkg.
+  </Card>
+  <Card title="macOS" icon="apple" href="/compiling/macos">
+    Build with Homebrew and optionally generate an Xcode project.
+  </Card>
+</CardGroup>
+
+## CMake options
+
+Pass options to CMake using the `-D<OPTION>=<VALUE>` syntax:
+
+```bash
+cmake . -DBUILD_SERVER=TRUE -DCMAKE_BUILD_TYPE=Release
+```
+
+To list all available options and their current values:
+
+```bash
+cmake . -LH
+```
+
+### General build options
+
+| Option | Default | Description |
+|---|---|---|
+| `BUILD_CLIENT` | `TRUE` | Build the Luanti client |
+| `BUILD_SERVER` | `FALSE` | Build the Luanti server |
+| `BUILD_UNITTESTS` | `TRUE` | Build unit test sources |
+| `BUILD_BENCHMARKS` | `FALSE` | Build benchmark sources |
+| `BUILD_DOCUMENTATION` | `TRUE` | Build Doxygen documentation |
+| `CMAKE_BUILD_TYPE` | `Release` | Build type: `Release`, `Debug`, `SemiDebug`, `RelWithDebInfo`, or `MinSizeRel` |
+| `PRECOMPILE_HEADERS` | `FALSE` | Precompile some headers (experimental; requires CMake 3.16+) |
+| `PRECOMPILED_HEADERS_PATH` | _(auto)_ | Path to the file listing headers to precompile |
+| `USE_SDL2_STATIC` | `TRUE` | Link with `SDL2::SDL2-static` instead of `SDL2::SDL2` |
+| `USE_SDL3` | `FALSE` | Build with SDL3 (experimental) |
+| `USE_SDL3_STATIC` | `TRUE` | Link with `SDL3::SDL3-static` instead of `SDL3::SDL3-shared` |
+| `RUN_IN_PLACE` | `FALSE` | Create a portable install — worlds and settings live in the current directory |
+| `ENABLE_UPDATE_CHECKER` | `TRUE` | Enable update checks by default |
+| `INSTALL_DEVTEST` | `FALSE` | Install the Development Test game alongside Luanti |
+| `USE_GPROF` | `FALSE` | Enable profiling with GProf |
+| `BUILD_WITH_TRACY` | `FALSE` | Fetch and build with the Tracy profiler client |
+| `FETCH_TRACY_GIT_TAG` | `master` | Git tag for fetching the Tracy client |
+| `VERSION_EXTRA` | _(empty)_ | Text appended to the version string (e.g. `foobar` → `Luanti 5.10.0-foobar`) |
+
+### Feature flags
+
+| Option | Default | Description |
+|---|---|---|
+| `ENABLE_CURL` | `ON` | Build with cURL — enables server list, content browser, and more |
+| `ENABLE_CURSES` | `ON` | Build with (n)curses — enables server-side terminal (`--terminal`) |
+| `ENABLE_GETTEXT` | `ON` | Build with Gettext — enables translations |
+| `ENABLE_LEVELDB` | `ON` | Build with LevelDB — enables the LevelDB map backend |
+| `ENABLE_POSTGRESQL` | `ON` | Build with libpq — enables the PostgreSQL map backend (9.5+ recommended) |
+| `ENABLE_REDIS` | `ON` | Build with libhiredis — enables the Redis map backend |
+| `ENABLE_SPATIAL` | `ON` | Build with LibSpatial — speeds up AreaStores |
+| `ENABLE_OPENSSL` | `ON` | Build with OpenSSL — speeds up SHA1 and SHA2 hashing |
+| `ENABLE_SOUND` | `ON` | Build with OpenAL, libogg, and libvorbis — enables in-game sounds |
+| `ENABLE_LTO` | _(varies)_ | Build with IPO/LTO optimizations — smaller and faster than a regular build |
+| `ENABLE_LUAJIT` | `ON` | Build with LuaJIT (much faster than the non-JIT Lua interpreter) |
+| `ENABLE_PROMETHEUS` | `OFF` | Build with Prometheus metrics exporter (listens on TCP 30000 by default) |
+| `ENABLE_SYSTEM_GMP` | `ON` | Use GMP from the system (much faster than the bundled mini-GMP) |
+| `ENABLE_SYSTEM_JSONCPP` | `ON` | Use JsonCPP from the system |
+
+### Library-specific paths
+
+These options are only needed when CMake cannot automatically detect a library, or when you want to point to a specific copy.
+
+| Option | Platform | Description |
+|---|---|---|
+| `SDL2_DLL` | Windows | Path to `libSDL2.dll` |
+| `SDL2_INCLUDE_DIRS` | All | Directory containing `SDL.h` |
+| `SDL2_LIBRARIES` | All | Path to `libSDL2.a` / `.so` / `.lib` |
+| `CURL_DLL` | Windows | Path to `libcurl.dll` |
+| `CURL_INCLUDE_DIR` | All | Directory containing `curl.h` |
+| `CURL_LIBRARY` | All | Path to `libcurl.a` / `.so` / `.lib` |
+| `EXTRA_DLL` | Windows | Optional paths to additional DLLs to package |
+| `FREETYPE_INCLUDE_DIR_freetype2` | All | Directory containing files such as `ftimage.h` |
+| `FREETYPE_INCLUDE_DIR_ft2build` | All | Directory containing `ft2build.h` |
+| `FREETYPE_LIBRARY` | All | Path to `libfreetype.a` / `.so` / `.lib` |
+| `FREETYPE_DLL` | Windows | Path to `libfreetype-6.dll` |
+| `GETTEXT_DLL` | Windows | Paths to `libintl` and `libiconv` DLLs |
+| `GETTEXT_INCLUDE_DIR` | All | Directory containing `libintl.h` |
+| `GETTEXT_LIBRARY` | Optional | Path to `libintl.so` / `.dll.a` |
+| `GETTEXT_MSGFMT` | All | Path to the `msgfmt` executable |
+| `GMP_INCLUDE_DIR` | All | Directory containing `gmp.h` |
+| `GMP_LIBRARY` | All | Path to `libgmp.a` / `.so` / `.lib` |
+| `ICONV_LIBRARY` | Optional | Path to `libiconv.so` / `.dylib` |
+| `JPEG_DLL` | Windows | Path to `libjpeg.dll` |
+| `JPEG_INCLUDE_DIR` | All | Directory containing `jpeg.h` |
+| `JPEG_LIBRARY` | All | Path to `libjpeg.a` / `.so` / `.lib` |
+| `JSON_INCLUDE_DIR` | All | Directory containing `json/allocator.h` |
+| `JSON_LIBRARY` | All | Path to `libjson.a` / `.so` / `.lib` |
+| `LEVELDB_INCLUDE_DIR` | All | Directory containing `db.h` |
+| `LEVELDB_LIBRARY` | All | Path to `libleveldb.a` / `.so` / `.dll.a` |
+| `LEVELDB_DLL` | Windows | Path to `libleveldb.dll` |
+| `PostgreSQL_INCLUDE_DIR` | All | Directory containing `libpq-fe.h` |
+| `PostgreSQL_LIBRARY` | All | Path to `libpq.a` / `.so` / `.lib` |
+| `REDIS_INCLUDE_DIR` | All | Directory containing `hiredis.h` |
+| `REDIS_LIBRARY` | All | Path to `libhiredis.a` / `.so` |
+| `SPATIAL_INCLUDE_DIR` | All | Directory containing `spatialindex/SpatialIndex.h` |
+| `SPATIAL_LIBRARY` | All | Path to `libspatialindex.so` / `spatialindex-32.lib` |
+| `LUA_INCLUDE_DIR` | LuaJIT | Directory containing `luajit.h` |
+| `LUA_LIBRARY` | LuaJIT | Path to `libluajit.a` / `.so` |
+| `OGG_DLL` | Windows | Path to `libogg.dll` |
+| `OGG_INCLUDE_DIR` | All | Directory containing an `ogg/` directory with `ogg.h` |
+| `OGG_LIBRARY` | All | Path to `libogg.a` / `.so` / `.dll.a` |
+| `OPENAL_DLL` | Windows | Path to `OpenAL32.dll` |
+| `OPENAL_INCLUDE_DIR` | All | Directory containing `al.h` |
+| `OPENAL_LIBRARY` | All | Path to `libopenal.a` / `.so` / `OpenAL32.lib` |
+| `PNG_DLL` | Windows | Path to `libpng.dll` |
+| `PNG_INCLUDE_DIR` | All | Directory containing `png.h` |
+| `PNG_LIBRARY` | All | Path to `libpng.a` / `.so` / `.lib` |
+| `PROMETHEUS_PULL_LIBRARY` | Prometheus | Path to `prometheus-cpp-pull` |
+| `PROMETHEUS_CORE_LIBRARY` | Prometheus | Path to `prometheus-cpp-core` |
+| `PROMETHEUS_CPP_INCLUDE_DIR` | Prometheus | Directory containing `prometheus/counter.h` |
+| `SQLITE3_INCLUDE_DIR` | All | Directory containing `sqlite3.h` |
+| `SQLITE3_LIBRARY` | All | Path to `libsqlite3.a` / `.so` / `.lib` |
+| `VORBISFILE_LIBRARY` | All | Path to `libvorbisfile.a` / `.so` / `.dll.a` |
+| `VORBIS_DLL` | Windows | Paths to vorbis DLLs |
+| `VORBIS_INCLUDE_DIR` | All | Directory containing a `vorbis/` directory with `vorbisenc.h` |
+| `VORBIS_LIBRARY` | All | Path to `libvorbis.a` / `.so` / `.dll.a` |
+| `ZLIB_DLL` | Windows | Path to `zlib1.dll` |
+| `ZLIB_INCLUDE_DIR` | All | Directory containing `zlib.h` |
+| `ZLIB_LIBRARY` | All | Path to `libz.a` / `.so` / `zlib.lib` |
+| `ZSTD_DLL` | Windows | Path to `libzstd.dll` |
+| `ZSTD_INCLUDE_DIR` | All | Directory containing `zstd.h` |
+| `ZSTD_LIBRARY` | All | Path to `libzstd.a` / `.so` / `ztd.lib` |
+
+## Build types
+
+The `CMAKE_BUILD_TYPE` option controls optimization level and debug information:
+
+| Value | Description |
+|---|---|
+| `Release` | Fully optimized production build (default) |
+| `Debug` | No optimization; maximum debug info — use this when debugging with a debugger |
+| `SemiDebug` | Partially optimized debug build |
+| `RelWithDebInfo` | Release optimization with debug symbols included |
+| `MinSizeRel` | Release build with `-Os` to minimize executable size |
+
+<Tip>
+  Use `Debug` builds when reporting issues or profiling with a debugger. Debug builds produce much more useful output but run noticeably slower.
+</Tip>

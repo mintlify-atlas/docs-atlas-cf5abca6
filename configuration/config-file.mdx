@@ -1,0 +1,178 @@
+---
+title: "Configuration file"
+description: "Reference for minetest.conf — the main Luanti configuration file. Covers location, format, and the most important settings with types and defaults."
+---
+
+## File location
+
+Luanti reads its configuration from `minetest.conf`. The default location is `user/minetest.conf`, where `user` is the platform-specific user data directory. See the [paths reference](/configuration/paths) for exact locations.
+
+The file is created automatically the first time you close Luanti. You can also specify a custom path at startup:
+
+```bash
+luanti --config /path/to/minetest.conf
+```
+
+A run-in-place build also looks for the configuration file at `<exe>/../minetest.conf` and `<exe>/../../minetest.conf`.
+
+## File format
+
+Settings use the format `key = value`. Lines starting with `#` are comments. To activate a commented-out setting, remove the leading `#`.
+
+```ini
+# This is a comment — the setting below is inactive:
+# viewing_range = 190
+
+# This setting is active:
+viewing_range = 300
+```
+
+<Tip>
+  The file `minetest.conf.example` in the source distribution lists every available setting with its type, range, and default value. It is the authoritative reference for all settings.
+</Tip>
+
+## Graphics and display
+
+### Screen and window
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `screen_w` | int (1–65535) | `1024` | Initial window width |
+| `screen_h` | int (1–65535) | `600` | Initial window height |
+| `fullscreen` | bool | `false` | Start in fullscreen mode |
+| `window_maximized` | bool | `false` | Start with the window maximized |
+| `autosave_screensize` | bool | `true` | Save window size automatically when changed |
+| `vsync` | bool | `false` | Vertical synchronization (requires restart) |
+| `fps_max` | int | `60` | Maximum FPS (sleeps to avoid wasting CPU) |
+| `fps_max_unfocused` | int | `10` | Maximum FPS when the window is not focused |
+
+### View distance and performance
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `viewing_range` | int (20–4000) | `190` | View distance in nodes |
+| `undersampling` | int (1–8) | `1` | Render scale factor — higher values reduce quality for performance |
+| `smooth_lighting` | bool | `true` | Enable smooth lighting with ambient occlusion |
+| `performance_tradeoffs` | bool | `false` | Enable minor visual tradeoffs to reduce CPU load |
+
+### Camera
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `fov` | int (45–160) | `72` | Field of view in degrees |
+| `display_gamma` | float (0.33–3) | `1.0` | Gamma correction for light levels — higher values brighten shadows |
+| `view_bobbing_amount` | float (0–7.9) | `1.0` | Camera bobbing intensity; `0` disables bobbing |
+| `camera_smoothing` | float (0–0.99) | `0.0` | Mouse look smoothing; `0` disables it |
+
+### Fog
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `enable_fog` | bool | `true` | Render fog at the edge of the visible area |
+| `fog_start` | float (0–0.99) | `0.4` | Fraction of view distance at which fog begins |
+| `directional_colored_fog` | bool | `true` | Vary fog color with time of day and view direction |
+
+### Antialiasing and filtering
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `antialiasing` | enum | `none` | Antialiasing method: `none`, `fsaa`, or `ssaa` |
+| `fsaa` | enum | `2` | FSAA/SSAA sample count: `2`, `4`, `8`, or `16` |
+| `fxaa` | bool | `false` | Apply FXAA post-process edge smoothing |
+| `mip_map` | bool | `false` | Enable mipmapping for scaled textures |
+| `bilinear_filter` | bool | `false` | Use bilinear texture filtering |
+| `trilinear_filter` | bool | `false` | Use trilinear texture filtering |
+| `anisotropic_filter` | bool | `false` | Use anisotropic filtering when viewing textures at an angle |
+
+### Dynamic shadows
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `enable_dynamic_shadows` | bool | `false` | Enable shadow mapping |
+| `shadow_map_texture_size` | int (128–8192) | `2048` | Shadow map resolution — must be a power of two |
+| `shadow_map_max_distance` | float (10–1000) | `140.0` | Maximum shadow render distance |
+| `shadow_strength_gamma` | float (0.1–10) | `1.0` | Shadow intensity — lower is lighter, higher is darker |
+
+### Post processing effects
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `enable_post_processing` | bool | `true` | Enable the post-processing pipeline |
+| `tone_mapping` | bool | `false` | Enable Hable filmic tone mapping |
+| `enable_bloom` | bool | `false` | Enable bloom — bright colors bleed into neighboring objects |
+| `enable_volumetric_lighting` | bool | `false` | Enable volumetric lighting ("godrays") |
+| `enable_auto_exposure` | bool | `false` | Automatically adjust exposure to scene brightness |
+| `debanding` | bool | `true` | Apply dithering to reduce color banding artifacts |
+
+## Audio
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `sound_volume` | float (0–1) | `0.8` | Master volume |
+| `sound_volume_unfocused` | float (0–1) | `0.3` | Volume multiplier when the window is not focused |
+| `mute_sound` | bool | `false` | Mute all sounds |
+
+## Controls
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `mouse_sensitivity` | float (0.001–10) | `0.2` | Mouse sensitivity multiplier |
+| `invert_mouse` | bool | `false` | Invert vertical mouse movement |
+| `autojump` | bool | `false` | Automatically jump over single-node obstacles |
+| `doubletap_jump` | bool | `false` | Double-tap Jump to toggle fly mode |
+| `always_fly_fast` | bool | `true` | Always fly at fast speed when both fly and fast modes are active |
+| `toggle_sneak_key` | bool | `false` | Sneak key toggles instead of requiring hold |
+| `safe_dig_and_place` | bool | `false` | Prevent repeated digging/placing when holding the button |
+| `enable_hotbar_mouse_wheel` | bool | `true` | Use the scroll wheel to cycle through hotbar items |
+| `invert_hotbar_mouse_wheel` | bool | `false` | Invert scroll wheel direction for hotbar selection |
+
+## User interface
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `language` | enum | _(system)_ | UI language; empty uses the system locale (requires restart) |
+| `gui_scaling` | float (0.5–20) | `1.0` | Scale the entire GUI by this factor |
+| `hud_scaling` | float (0.5–20) | `1.0` | Scale HUD elements by this factor |
+| `menu_clouds` | bool | `true` | Animated cloud background in the main menu |
+| `menu_theme` | enum | `light` | Main menu background theme: `dark` or `light` |
+| `recent_chat_messages` | int (2–20) | `6` | Number of recent chat messages displayed in-game |
+| `screenshot_path` | path | `screenshots` | Directory where screenshots are saved |
+| `screenshot_format` | enum | `png` | Screenshot format: `png` or `jpg` |
+
+## Server settings
+
+### Identity and listing
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `server_name` | string | `Luanti server` | Server name shown in the serverlist and on join |
+| `server_description` | string | `mine here` | Server description shown in the serverlist |
+| `server_address` | string | — | Domain name of the server for the serverlist |
+| `server_url` | string | — | Homepage URL for the serverlist |
+| `server_announce` | bool | `false` | Automatically report to the public serverlist |
+| `motd` | string | — | Message of the day shown to players on join |
+
+### Networking
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `port` | int (1–65535) | `30000` | UDP port the server listens on |
+| `bind_address` | string | — | Network interface to bind to; empty binds to all interfaces |
+| `max_users` | int (0–65535) | `15` | Maximum simultaneous connected players |
+| `ipv6_server` | bool | `true` | Enable IPv6 support (ignored if `bind_address` is set) |
+
+### Security and permissions
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `default_privs` | string | `interact, shout` | Privileges granted to new players automatically |
+| `disallow_empty_password` | bool | `false` | Require a non-empty password for all players |
+| `default_password` | string | — | Password required for new players to register |
+
+### Gameplay
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `time_speed` | int | `72` | Day/night cycle speed — `72` = 20 min cycle, `0` = frozen |
+| `world_start_time` | int (0–23999) | `6125` | Time of day (in millihours) when a new world is created |
+| `item_entity_ttl` | int | `900` | Seconds before dropped items despawn; `-1` disables despawn |

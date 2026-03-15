@@ -1,0 +1,318 @@
+---
+title: "Callbacks"
+description: "Reference for all global callback registration functions in Luanti: player events, chat, map events, globalsteps, ABMs, and LBMs."
+---
+
+Callbacks let your mod respond to engine events. Register them at load time using the `core.register_on_*` family of functions and `core.register_globalstep`, `core.register_abm`, and `core.register_lbm`.
+
+<Warning>
+All registration functions must be called at load time (from the top-level scope of `init.lua` or files it loads synchronously). Registering callbacks from inside other callbacks is not supported.
+</Warning>
+
+## Server lifecycle
+
+<ParamField path="core.register_globalstep(function(dtime))" type="function">
+  Called every server step, usually every ~0.1 seconds. `dtime` is the time in seconds since the last step.
+
+  ```lua
+  core.register_globalstep(function(dtime)
+      -- runs every server step
+  end)
+  ```
+
+  <Warning>Keep globalstep callbacks fast. Heavy work here causes server-wide lag for all players.</Warning>
+</ParamField>
+
+<ParamField path="core.register_on_mods_loaded(function())" type="function">
+  Called once, after all mods have finished loading and before media is cached or aliases are processed.
+</ParamField>
+
+<ParamField path="core.register_on_shutdown(function())" type="function">
+  Called during server shutdown before players are kicked.
+
+  <Warning>If the server crashes abnormally, these callbacks will likely not run. Save important data at regular intervals, not only on shutdown.</Warning>
+</ParamField>
+
+## Player events
+
+<ParamField path="core.register_on_newplayer(function(player))" type="function">
+  Called when a player joins the server for the very first time.
+
+  - `player` (ObjectRef): The new player.
+</ParamField>
+
+<ParamField path="core.register_on_joinplayer(function(player, last_login))" type="function">
+  Called every time a player joins the game.
+
+  - `player` (ObjectRef): The joining player.
+  - `last_login` (number or nil): UNIX timestamp of the previous login, or `nil` for new players.
+
+  ```lua
+  core.register_on_joinplayer(function(player, last_login)
+      local name = player:get_player_name()
+      core.chat_send_player(name, "Welcome back, " .. name .. "!")
+  end)
+  ```
+</ParamField>
+
+<ParamField path="core.register_on_leaveplayer(function(player, timed_out))" type="function">
+  Called when a player leaves the game. Not called for players still connected when the server shuts down.
+
+  - `player` (ObjectRef): The leaving player.
+  - `timed_out` (boolean): `true` if the player timed out, `false` for voluntary disconnect.
+</ParamField>
+
+<ParamField path="core.register_on_prejoinplayer(function(name, ip))" type="function">
+  Called when a client connects, prior to authentication. Return a string to reject the connection with that reason.
+
+  - `name` (string): The player name being connected.
+  - `ip` (string): Client IP address.
+
+  **Return:** `nil` to allow, or a string to reject.
+</ParamField>
+
+<ParamField path="core.register_on_dieplayer(function(player, reason))" type="function">
+  Called when a player dies.
+
+  - `player` (ObjectRef): The dying player.
+  - `reason` (table): A `PlayerHPChangeReason` table.
+</ParamField>
+
+<ParamField path="core.register_on_respawnplayer(function(player))" type="function">
+  Called before a player is repositioned when respawning. Return `true` to disable the default spawn placement.
+
+  - `player` (ObjectRef): The respawning player.
+
+  **Return:** `true` to handle placement yourself, otherwise `nil`.
+</ParamField>
+
+<ParamField path="core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage))" type="function">
+  Called when a player is punched. Also called if the player is already dead.
+
+  - `player` (ObjectRef): The punched player.
+  - `hitter` (ObjectRef or nil): The punching entity.
+  - `time_from_last_punch` (number or nil): Anti-spam timing.
+  - `tool_capabilities` (table or nil): Capabilities of the used item.
+  - `dir` (vector): Unit vector from hitter to player.
+  - `damage` (number): Calculated damage.
+
+  **Return:** `true` to prevent the default damage mechanism.
+</ParamField>
+
+<ParamField path="core.register_on_rightclickplayer(function(player, clicker))" type="function">
+  Called when the 'place/use' key is used while pointing at a player.
+
+  - `player` (ObjectRef): The targeted player.
+  - `clicker` (ObjectRef): The entity that clicked.
+</ParamField>
+
+<ParamField path="core.register_on_player_hpchange(function(player, hp_change, reason), modifier)" type="function">
+  Called when a player's HP changes.
+
+  - `player` (ObjectRef): The affected player.
+  - `hp_change` (number): The change amount (negative for damage).
+  - `reason` (table): A `PlayerHPChangeReason` table.
+  - `modifier` (boolean): If `true`, this is a modifier callback that should return the (possibly adjusted) `hp_change`. Modifiers run before non-modifiers.
+
+  **Return (modifier only):** adjusted `hp_change` number, and optionally `true` as a second value to stop further modifier callbacks.
+</ParamField>
+
+## Chat
+
+<ParamField path="core.register_on_chat_message(function(name, message))" type="function">
+  Called whenever a player sends a chat message.
+
+  - `name` (string): The player's name.
+  - `message` (string): The message text.
+
+  **Return:** `true` to mark the message as handled (prevents it from being sent to other players).
+
+  ```lua
+  core.register_on_chat_message(function(name, message)
+      if message == "!hello" then
+          core.chat_send_all(name .. " says hello!")
+          return true  -- don't echo the original message
+      end
+  end)
+  ```
+</ParamField>
+
+<ParamField path="core.register_on_chatcommand(function(name, command, params))" type="function">
+  Called when any chat command is issued, before the built-in command dispatch. Return `true` to prevent default handling.
+
+  - `name` (string): Player who issued the command.
+  - `command` (string): Command name (without the `/`).
+  - `params` (string): The rest of the command line.
+</ParamField>
+
+<ParamField path="core.register_on_player_receive_fields(function(player, formname, fields))" type="function">
+  Called when the server receives form input from a player (button presses, text field submissions, dropdown changes, etc.).
+
+  - `player` (ObjectRef): The submitting player.
+  - `formname` (string): Name passed to `core.show_formspec`. Empty string for the inventory formspec.
+  - `fields` (table): Map of element names to their current values.
+
+  **Return:** `true` to stop further registered callbacks from running. Callbacks are called newest-first.
+
+  <Note>This is not called for node metadata formspecs. Those use `on_receive_fields` in the node definition.</Note>
+</ParamField>
+
+## Map and world events
+
+<ParamField path="core.register_on_generated(function(minp, maxp, blockseed))" type="function">
+  Called after a chunk has been generated and written to the map. Runs on the main thread.
+
+  - `minp`, `maxp` (vector): Chunk bounds.
+  - `blockseed` (number): 64-bit seed for this chunk.
+
+  <Warning>Avoid heavy processing here as it blocks the main thread. Consider using the mapgen environment via `core.register_mapgen_script` instead.</Warning>
+</ParamField>
+
+<ParamField path="core.register_on_placenode(function(pos, newnode, placer, oldnode, itemstack, pointed_thing))" type="function">
+  Called after a node is placed. Return `true` to keep the item in `itemstack` (prevents item consumption).
+
+  **Prefer `after_place_node` in the node definition when possible.**
+</ParamField>
+
+<ParamField path="core.register_on_dignode(function(pos, oldnode, digger))" type="function">
+  Called after a node is dug.
+
+  **Prefer `after_dig_node` in the node definition when possible.**
+</ParamField>
+
+<ParamField path="core.register_on_punchnode(function(pos, node, puncher, pointed_thing))" type="function">
+  Called when a node is punched.
+</ParamField>
+
+<ParamField path="core.register_on_liquid_transformed(function(pos_list, node_list))" type="function">
+  Called after the engine's liquid transformation process modifies liquid nodes.
+
+  - `pos_list` (table): Array of all modified positions.
+  - `node_list` (table): Array of the old nodes at those positions (same indices as `pos_list`).
+</ParamField>
+
+<ParamField path="core.register_on_mapblocks_changed(function(modified_blocks, modified_block_count))" type="function">
+  Called after any node or node metadata changes. Called at most once per server step. May have false positives.
+
+  - `modified_blocks` (table): Set of modified mapblock position hashes (keys) with `true` values.
+  - `modified_block_count` (number): Number of entries in the set.
+</ParamField>
+
+## Inventory events
+
+<ParamField path="core.register_on_craft(function(itemstack, player, old_craft_grid, craft_inv))" type="function">
+  Called when a player crafts something.
+
+  - `itemstack` (ItemStack): The crafted output.
+  - `old_craft_grid` (table): List of `ItemStack`s from the recipe.
+  - `craft_inv` (InvRef): The crafting inventory.
+
+  **Return:** an `ItemStack` to replace the output, or `nil` to leave it unchanged.
+</ParamField>
+
+<ParamField path="core.register_on_player_inventory_action(function(player, action, inventory, inventory_info))" type="function">
+  Called after an item is moved, put into, or taken from a player inventory.
+
+  - `action` (string): `"move"`, `"put"`, or `"take"`.
+  - `inventory_info` (table): Action-specific data:
+    - `move`: `{from_list, to_list, from_index, to_index, count}`
+    - `put`/`take`: `{listname, index, stack}`
+</ParamField>
+
+## Active Block Modifiers (ABM)
+
+ABMs are called repeatedly and randomly for matching nodes in active mapblocks.
+
+<ParamField path="core.register_abm(def)" type="function">
+  Registers an Active Block Modifier.
+
+  ```lua
+  core.register_abm({
+      label    = "Lava cooling",  -- for profiling
+      nodenames = {"default:lava_source"},
+      neighbors = {"default:water_source", "default:water_flowing"},
+      -- without_neighbors = {...},  -- must NOT have these neighbors
+      interval  = 10.0,           -- seconds between runs
+      chance    = 50,             -- 1/chance probability per interval
+      min_y     = -32768,
+      max_y     = 32767,
+      catch_up  = true,           -- simulate missed time when returning to area
+      action    = function(pos, node, active_object_count, active_object_count_wider)
+          -- Transform lava into obsidian near water
+          core.set_node(pos, {name = "default:obsidian"})
+      end,
+  })
+  ```
+
+  <Expandable title="ABM definition fields">
+    | Field | Type | Description |
+    |---|---|---|
+    | `label` | string | Descriptive label for profiling |
+    | `nodenames` | table | Node names or `"group:name"` to match |
+    | `neighbors` | table | Only trigger if at least one of these neighbors is present |
+    | `without_neighbors` | table | Only trigger if none of these neighbors are present (5.10.0+) |
+    | `interval` | number | Operation interval in seconds |
+    | `chance` | integer | 1/chance probability per interval per node |
+    | `min_y`, `max_y` | number | Height limits |
+    | `catch_up` | boolean | Simulate missed time when returning to area |
+    | `action` | function | Callback: `(pos, node, active_count, active_count_wider)` |
+  </Expandable>
+</ParamField>
+
+## Loading Block Modifiers (LBM)
+
+LBMs run once when a mapblock containing matching nodes is **activated** (not just loaded).
+
+<ParamField path="core.register_lbm(def)" type="function">
+  Registers a Loading Block Modifier.
+
+  ```lua
+  core.register_lbm({
+      label    = "Upgrade legacy doors",
+      name     = "mymod:upgrade_doors",   -- identifier, modname:whatever
+      nodenames = {"mymod:old_door"},
+      run_at_every_load = false,          -- true: run every activation
+      action   = function(pos, node, dtime_s)
+          core.swap_node(pos, {name = "mymod:new_door"})
+      end,
+      -- Alternative to action for bulk processing (5.10.0+):
+      -- bulk_action = function(pos_list, dtime_s) end,
+  })
+  ```
+
+  <Expandable title="LBM definition fields">
+    | Field | Type | Description |
+    |---|---|---|
+    | `label` | string | Descriptive label for profiling |
+    | `name` | string | Unique identifier (`modname:whatever`) |
+    | `nodenames` | table | Node names to trigger on (groups and non-registered names work) |
+    | `run_at_every_load` | boolean | If `false`, runs only once per mapblock since LBM introduction |
+    | `action` | function | Callback: `(pos, node, dtime_s)` |
+    | `bulk_action` | function | Alternative: `(pos_list, dtime_s)` — cannot be used alongside `action` |
+  </Expandable>
+</ParamField>
+
+## Protection and auth events
+
+<ParamField path="core.register_on_protection_violation(function(pos, name))" type="function">
+  Called when a player attempts to interact with a protected area. The registered callbacks are invoked by `core.record_protection_violation`.
+
+  - `pos` (vector): The position of the violation.
+  - `name` (string): The player name.
+</ParamField>
+
+<ParamField path="core.register_on_priv_grant(function(name, granter, priv))" type="function">
+  Called when `granter` grants privilege `priv` to `name`. Called twice when done by a player (once with the player name as granter, once with `nil`).
+</ParamField>
+
+<ParamField path="core.register_on_priv_revoke(function(name, revoker, priv))" type="function">
+  Called when `revoker` revokes privilege `priv` from `name`. Same dual-call behavior as `register_on_priv_grant`.
+</ParamField>
+
+<ParamField path="core.register_on_authplayer(function(name, ip, is_success))" type="function">
+  Called when a client attempts to log into an account.
+
+  - `name` (string): Account name.
+  - `ip` (string): Client IP address.
+  - `is_success` (boolean): Whether authentication succeeded.
+</ParamField>

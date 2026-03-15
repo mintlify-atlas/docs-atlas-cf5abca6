@@ -1,0 +1,331 @@
+---
+title: "Mapgen API"
+description: "Reference for Luanti map generation: biome, ore, and decoration registration; VoxelManip; mapgen settings; and generation callbacks."
+---
+
+Luanti's map generator produces terrain, biomes, ores, and decorations. Mods can hook into this pipeline to register new content and post-process generated chunks.
+
+## Registration functions
+
+Call these only at load time, before the server finishes startup.
+
+### Biomes
+
+<ParamField path="core.register_biome(def)" type="function">
+  Registers a biome. Returns an integer handle uniquely identifying it on success. Use `core.get_biome_id(name)` to retrieve the ID by name.
+
+  Key definition fields:
+
+  ```lua
+  {
+      name = "tundra",
+      node_top    = "default:snow",    -- node placed on the surface
+      depth_top   = 1,                  -- depth of the top layer
+      node_filler = "default:dirt",    -- node below the top layer
+      depth_filler = 3,
+      node_stone  = "default:stone",   -- deep stone node
+      node_water  = "default:water_source",
+      node_river_water = "default:river_water_source",
+      y_min = -31000,
+      y_max = 31000,
+      heat_point     = 0,              -- 0 = cold, 100 = hot
+      humidity_point = 50,             -- 0 = dry, 100 = wet
+      -- optional: weight = 1,         -- relative selection probability
+  }
+  ```
+</ParamField>
+
+<ParamField path="core.unregister_biome(name)" type="function">
+  Unregisters the named biome. Clears its entry from `core.registered_biomes`.
+
+  <Warning>This changes biome–ID correspondences. Any decorations or ores using the `biomes` field must be cleared and re-registered afterwards.</Warning>
+</ParamField>
+
+<ParamField path="core.clear_registered_biomes()" type="function">
+  Clears all registered biomes. Subject to the same warning as `unregister_biome`.
+</ParamField>
+
+### Ores
+
+<ParamField path="core.register_ore(def)" type="function">
+  Registers an ore. Returns an integer handle. Ore generation order follows registration order.
+
+  Key definition fields:
+
+  ```lua
+  {
+      name        = "mymod:coal",         -- optional name for lookup
+      ore_type    = "scatter",             -- "scatter", "sheet", "puff", "blob", "vein", "stratum"
+      ore         = "default:stone_with_coal",
+      wherein     = "default:stone",       -- host node(s)
+      clust_scarcity = 8 * 8 * 8,         -- 1-in-N chance per node
+      clust_num_ores = 8,                  -- ores per cluster
+      clust_size  = 3,                     -- cluster bounding box size
+      y_min = -31000,
+      y_max = 64,
+      -- optional: noise_params, noise_threshold, biomes
+  }
+  ```
+
+  Supported ore types: `scatter` (uniform clusters), `sheet` (horizontal sheets), `puff` (cloud shapes), `blob` (deformed spheres), `vein` (intersecting noise veins), `stratum` (horizontal strata).
+</ParamField>
+
+### Decorations
+
+<ParamField path="core.register_decoration(def)" type="function">
+  Registers a decoration. Returns an integer handle. Use `core.get_decoration_id(name)` to retrieve by name. Decoration generation order follows registration order.
+
+  Key definition fields:
+
+  ```lua
+  {
+      name            = "mymod:grass",
+      deco_type       = "simple",          -- "simple", "schematic", "lsystem"
+      place_on        = "default:dirt_with_grass",
+      sidelen         = 16,                -- chunk subdivision size
+      fill_ratio      = 0.02,              -- probability per chunk subdivision
+      y_min = 1, y_max = 200,
+
+      -- For deco_type = "simple":
+      decoration = "default:grass",        -- node to place
+      height     = 1,
+
+      -- For deco_type = "schematic":
+      schematic  = "mymod/tree.mts",
+
+      -- optional: biomes, noise_params, rotation, etc.
+  }
+  ```
+</ParamField>
+
+### Schematics
+
+<ParamField path="core.register_schematic(schematic)" type="function">
+  Registers a schematic specified either by a filename (`.mts`) or a raw Lua table. Returns an integer handle.
+
+  If called during mod load with a relative path, the current mod path is prepended automatically.
+</ParamField>
+
+<ParamField path="core.place_schematic(pos, schematic, rotation, replacements, force_placement, flags)" type="function">
+  Places the schematic at `pos` in the live map.
+
+  - `rotation`: `"0"`, `"90"`, `"180"`, `"270"`, or `"random"`.
+  - `replacements`: `{["old_node"] = "new_node", ...}`.
+  - `force_placement` (boolean): Replace non-air/non-ignore nodes.
+  - `flags`: comma-separated `"place_center_x"`, `"place_center_y"`, `"place_center_z"`.
+
+  **Returns:** `nil` if the schematic could not be loaded.
+</ParamField>
+
+## Mapgen settings
+
+<ParamField path="core.get_mapgen_setting(name)" type="function">
+  Returns the active mapgen setting for `name` as a string, or `nil`.
+
+  Settings are resolved in order: map_meta.txt overrides → mod-set values → minetest.conf → engine defaults.
+</ParamField>
+
+<ParamField path="core.set_mapgen_setting(name, value[, override_meta])" type="function">
+  Sets a mapgen parameter. Has no effect if the setting is already in `map_meta.txt`, unless `override_meta` is `true`.
+
+  - `override_meta` (boolean, optional): If `true`, override `map_meta.txt`. Default `false`.
+
+  <Note>To set the world seed, use `"seed"`, not `"fixed_map_seed"`.</Note>
+</ParamField>
+
+<ParamField path="core.get_mapgen_setting_noiseparams(name)" type="function">
+  Returns the named mapgen setting as a `NoiseParams` table, or `nil`.
+</ParamField>
+
+<ParamField path="core.set_mapgen_setting_noiseparams(name, value[, override_meta])" type="function">
+  Sets a mapgen noise parameter. `value` is a `NoiseParams` table.
+</ParamField>
+
+```lua
+-- Only call these at load time
+core.set_mapgen_setting("mg_flags", "caves, dungeons")
+core.set_mapgen_setting("water_level", "1")
+```
+
+## Mapgen scripts
+
+<ParamField path="core.register_mapgen_script(path)" type="function">
+  Registers a Lua file to be loaded in every mapgen (emerge) environment. The file runs in isolated worker threads, not the main server. Scripts registered this way can use `core.register_on_generated`.
+
+  - `path` (string): Absolute path to the Lua file.
+</ParamField>
+
+## Generation callbacks
+
+<ParamField path="core.register_on_generated(func)" type="function">
+  **In the main environment:** called after a chunk is generated and written to the map. Runs on the main server thread; use sparingly to avoid lag.
+
+  ```lua
+  core.register_on_generated(function(minp, maxp, blockseed)
+      -- minp, maxp: bounds of the generated chunk
+      -- blockseed: 64-bit seed for this chunk
+  end)
+  ```
+
+  **In a mapgen environment** (from a script registered via `core.register_mapgen_script`):
+
+  ```lua
+  core.register_on_generated(function(vmanip, minp, maxp, blockseed)
+      -- vmanip: VoxelManip object containing chunk data
+      -- Called BEFORE the chunk is written to the map
+  end)
+  ```
+</ParamField>
+
+<ParamField path="core.emerge_area(pos1, pos2[, callback[, param]])" type="function">
+  Loads or generates the map area between `pos1` and `pos2`. The optional `callback` is called for each mapblock as it is processed.
+
+  ```lua
+  callback(blockpos, action, calls_remaining, param)
+  -- action: core.EMERGE_CANCELLED, EMERGE_ERRORED, EMERGE_FROM_MEMORY,
+  --         EMERGE_FROM_DISK, EMERGE_GENERATED
+  ```
+</ParamField>
+
+## VoxelManip API
+
+`VoxelManip` provides high-performance bulk read/write access to map data. It is the recommended approach for generating structures involving more than a few dozen nodes.
+
+Create one with `VoxelManip([p1, p2])` or `core.get_voxel_manip([p1, p2])`.
+
+```lua
+local vm = VoxelManip()
+local emin, emax = vm:read_from_map(
+    {x=-16, y=-16, z=-16},
+    {x=16,  y=16,  z=16}
+)
+```
+
+### Reading and writing
+
+<ResponseField name="vm:read_from_map(p1, p2)" type="vector, vector">
+  Loads the map region from `p1` to `p2` into the VoxelManip. Regions are MapBlock-aligned and may be larger than requested.
+
+  **Returns:** actual emerged `pmin`, actual emerged `pmax`.
+</ResponseField>
+
+<ResponseField name="vm:write_to_map([light])" type="nil">
+  Writes the VoxelManip data back to the map. You must call `set_data()` first.
+
+  - `light` (boolean): If `true` (default), recalculates lighting. If `false`, call `core.fix_light()` promptly.
+</ResponseField>
+
+<ResponseField name="vm:get_data([buffer])" type="table">
+  Returns a flat array of node content IDs for all positions in the loaded area. If `buffer` is provided, it is used instead of a new table.
+</ResponseField>
+
+<ResponseField name="vm:set_data(data)" type="nil">
+  Sets the content data from a flat array of content IDs.
+</ResponseField>
+
+<ResponseField name="vm:get_node_at(pos)" type="table">
+  Returns the `MapNode` at `pos`.
+</ResponseField>
+
+<ResponseField name="vm:set_node_at(pos, node)" type="nil">
+  Sets the node at `pos`.
+</ResponseField>
+
+<ResponseField name="vm:get_param2_data([buffer])" type="table">
+  Returns a flat array of `param2` values.
+</ResponseField>
+
+<ResponseField name="vm:set_param2_data(data)" type="nil">
+  Sets `param2` values from a flat array.
+</ResponseField>
+
+<ResponseField name="vm:calc_lighting([p1, p2][, propagate_shadow])" type="nil">
+  Recalculates lighting. For use with the mapgen VoxelManip only.
+</ResponseField>
+
+<ResponseField name="vm:update_liquids()" type="nil">
+  Triggers liquid flow for any liquid nodes set in the VoxelManip.
+</ResponseField>
+
+<ResponseField name="vm:get_emerged_area()" type="vector, vector">
+  Returns the actual emerged min and max positions.
+</ResponseField>
+
+<ResponseField name="vm:close()" type="nil">
+  Frees the memory buffers. Call this when done to avoid memory pressure. Available since 5.13.0.
+</ResponseField>
+
+### VoxelArea helper
+
+Use `VoxelArea` to compute flat array indices from positions:
+
+```lua
+local area = VoxelArea(emin, emax)
+local data = vm:get_data()
+
+for z = emin.z, emax.z do
+    for y = emin.y, emax.y do
+        for x = emin.x, emax.x do
+            local idx = area:index(x, y, z)
+            -- data[idx] is the content ID at (x,y,z)
+        end
+    end
+end
+```
+
+<ResponseField name="area:index(x, y, z)" type="number">
+  Returns the 1-based flat array index for the given position.
+</ResponseField>
+
+<ResponseField name="area:indexp(p)" type="number">
+  Same as `index` but accepts a vector.
+</ResponseField>
+
+<ResponseField name="area:position(i)" type="vector">
+  Returns the position for flat array index `i`.
+</ResponseField>
+
+### Full VoxelManip workflow
+
+```lua
+core.register_on_generated(function(minp, maxp, blockseed)
+    local vm, emin, emax = core.get_mapgen_object("voxelmanip")
+    local area = VoxelArea(emin, emax)
+    local data = vm:get_data()
+
+    local c_stone = core.get_content_id("default:stone")
+    local c_gold  = core.get_content_id("default:stone_with_gold")
+
+    -- Replace some stone with gold ore
+    for i, v in ipairs(data) do
+        if v == c_stone and math.random(1, 200) == 1 then
+            data[i] = c_gold
+        end
+    end
+
+    vm:set_data(data)
+    vm:write_to_map()
+end)
+```
+
+## Noise and biome queries
+
+<ParamField path="core.get_biome_id(biome_name)" type="function">
+  Returns the integer biome ID for the given name, as used in the biomemap.
+</ParamField>
+
+<ParamField path="core.get_biome_name(biome_id)" type="function">
+  Returns the biome name string for the given ID, or `nil` on failure.
+</ParamField>
+
+<ParamField path="core.get_biome_data(pos)" type="function">
+  Returns a table `{biome, heat, humidity}` for the given position, or `nil` on failure.
+</ParamField>
+
+<ParamField path="core.get_heat(pos)" type="function">
+  Returns the heat value at `pos`, or `nil` on failure.
+</ParamField>
+
+<ParamField path="core.get_humidity(pos)" type="function">
+  Returns the humidity value at `pos`, or `nil` on failure.
+</ParamField>

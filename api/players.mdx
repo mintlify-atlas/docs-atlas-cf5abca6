@@ -1,0 +1,261 @@
+---
+title: "Player API"
+description: "Reference for retrieving and controlling players in Luanti: position, velocity, health, inventory, HUD, physics overrides, and look direction."
+---
+
+Players are a special class of `ObjectRef`. They share all `ObjectRef` methods and have additional player-only methods documented here.
+
+## Getting players
+
+<ParamField path="core.get_player_by_name(name)" type="function">
+  Returns the `ObjectRef` for the named player, or nothing if the player is offline or does not exist.
+
+  - `name` (string): The player's username.
+
+  **Returns:** `ObjectRef` or nothing.
+</ParamField>
+
+<ParamField path="core.get_connected_players()" type="function">
+  Returns a list of `ObjectRef`s for all currently connected players.
+
+  **Returns:** `table` of `ObjectRef`s.
+</ParamField>
+
+```lua
+-- Iterate all online players
+for _, player in ipairs(core.get_connected_players()) do
+    local name = player:get_player_name()
+    core.chat_send_player(name, "Hello!")
+end
+```
+
+## PlayerRef methods
+
+All methods below are called on a player `ObjectRef`.
+
+### Identity
+
+<ResponseField name="player:get_player_name()" type="string">
+  Returns the player's username, or `""` if the object is not a player.
+</ResponseField>
+
+<ResponseField name="player:is_player()" type="boolean">
+  Returns `true`.
+</ResponseField>
+
+### Position and movement
+
+<ResponseField name="player:get_pos()" type="vector">
+  Returns the player's current world position as `{x, y, z}`.
+</ResponseField>
+
+<ResponseField name="player:set_pos(pos)" type="nil">
+  Teleports the player to `pos`. No-op if the player is attached to another object.
+
+  - `pos` (vector): Target position.
+</ResponseField>
+
+<ResponseField name="player:add_pos(pos)" type="nil">
+  Moves the player by adding `pos` to the current position. Prefer this over `get_pos`/`set_pos` to avoid synchronization issues.
+</ResponseField>
+
+<ResponseField name="player:get_velocity()" type="vector">
+  Returns the player's current velocity vector.
+</ResponseField>
+
+<ResponseField name="player:add_velocity(vel)" type="nil">
+  Adds `vel` to the player's current velocity. Preferred over combining `get_velocity` and setting it manually.
+
+  - `vel` (vector): Velocity delta, e.g. `{x=0, y=6.5, z=0}` to simulate a jump.
+
+  <Note>Does not apply during `free_move`. Adding Y velocity beyond the normal jump threshold will reduce existing X/Z velocity due to speed normalization.</Note>
+</ResponseField>
+
+### Health and breath
+
+<ResponseField name="player:get_hp()" type="number">
+  Returns the player's current health points.
+</ResponseField>
+
+<ResponseField name="player:set_hp(hp, reason)" type="nil">
+  Sets the player's health points. Clamped to 0–65535 and also limited by `hp_max` in object properties.
+
+  - `hp` (number): New HP value.
+  - `reason` (table, optional): A `PlayerHPChangeReason` table.
+</ResponseField>
+
+<ResponseField name="player:get_breath()" type="number">
+  Returns the player's current breath (air) value.
+</ResponseField>
+
+<ResponseField name="player:set_breath(value)" type="nil">
+  Sets the player's breath. `0` means the player is drowning; the maximum value hides the bubble bar.
+</ResponseField>
+
+### Inventory
+
+<ResponseField name="player:get_inventory()" type="InvRef">
+  Returns the player's inventory reference.
+</ResponseField>
+
+<ResponseField name="player:get_wield_index()" type="number">
+  Returns the index (starting at 1) of the wielded item in the wield list.
+</ResponseField>
+
+<ResponseField name="player:get_wield_list()" type="string">
+  Returns the name of the inventory list that contains the wielded item.
+</ResponseField>
+
+<ResponseField name="player:get_wielded_item()" type="ItemStack">
+  Returns a copy of the currently wielded item.
+</ResponseField>
+
+<ResponseField name="player:set_wielded_item(item)" type="boolean">
+  Replaces the wielded item. Returns `true` on success.
+</ResponseField>
+
+### Player metadata
+
+<ResponseField name="player:get_meta()" type="PlayerMetaRef">
+  Returns the `PlayerMetaRef` for persistent per-player metadata. Inherits all `MetaDataRef` methods (`get_string`, `set_string`, `get_int`, etc.).
+</ResponseField>
+
+```lua
+core.register_on_joinplayer(function(player)
+    local meta = player:get_meta()
+    local visits = (meta:get_int("visit_count") or 0) + 1
+    meta:set_int("visit_count", visits)
+    core.chat_send_player(
+        player:get_player_name(),
+        "Welcome back! Visit #" .. visits
+    )
+end)
+```
+
+### Physics overrides
+
+<ResponseField name="player:set_physics_override(override_table)" type="nil">
+  Overrides physics attributes for this player. All numeric fields are multipliers (default `1`).
+
+  <Expandable title="Physics override fields">
+    | Field | Description |
+    |---|---|
+    | `speed` | Multiplier for all movement speed and acceleration values |
+    | `speed_walk` | Walk speed multiplier |
+    | `speed_climb` | Climb speed multiplier |
+    | `speed_crouch` | Sneak speed multiplier |
+    | `speed_fast` | Fast mode speed multiplier |
+    | `jump` | Jump height multiplier |
+    | `gravity` | Gravity multiplier |
+    | `liquid_fluidity` | Resistance to movement through liquids |
+    | `liquid_sink` | Sinking speed in liquids |
+    | `acceleration_default` | Ground/climbing acceleration multiplier |
+    | `acceleration_air` | Air acceleration multiplier |
+    | `sneak` | Whether the player can sneak (boolean, default `true`) |
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="player:get_physics_override()" type="table">
+  Returns the current physics override table.
+</ResponseField>
+
+```lua
+-- Double speed and half gravity for a "moon" effect
+player:set_physics_override({
+    speed   = 2.0,
+    gravity = 0.5,
+    jump    = 1.5,
+})
+```
+
+### Look direction
+
+<ResponseField name="player:get_look_dir()" type="vector">
+  Returns the camera direction as a unit vector.
+</ResponseField>
+
+<ResponseField name="player:get_look_vertical()" type="number">
+  Returns the pitch in radians. Ranges between `-pi/2` (straight up) and `pi/2` (straight down).
+</ResponseField>
+
+<ResponseField name="player:get_look_horizontal()" type="number">
+  Returns the yaw in radians, counter-clockwise from the +z direction.
+</ResponseField>
+
+<ResponseField name="player:set_look_vertical(radians)" type="nil">
+  Sets the pitch. Positive values look downward.
+</ResponseField>
+
+<ResponseField name="player:set_look_horizontal(radians)" type="nil">
+  Sets the yaw. Positive values are counter-clockwise.
+</ResponseField>
+
+### HUD
+
+<ResponseField name="player:hud_add(hud_definition)" type="number">
+  Adds a HUD element described by `hud_definition`. Returns the element's ID on success.
+
+  Key definition fields:
+  - `type` (string): Element type: `"image"`, `"text"`, `"statbar"`, `"inventory"`, `"hotbar"`, `"waypoint"`, `"minimap"`, etc.
+  - `position` (table): Screen position as `{x=0..1, y=0..1}`.
+  - `text` (string): Texture name or displayed text depending on type.
+  - `z_index` (number): Rendering order. Default `0`.
+</ResponseField>
+
+<ResponseField name="player:hud_remove(id)" type="nil">
+  Removes the HUD element with the given ID.
+</ResponseField>
+
+<ResponseField name="player:hud_change(id, stat, value)" type="nil">
+  Changes a single field of an existing HUD element. `stat` accepts the same keys as the HUD definition (except `"type"`).
+</ResponseField>
+
+<ResponseField name="player:hud_get(id)" type="table">
+  Returns the HUD definition for the element with the given ID.
+</ResponseField>
+
+<ResponseField name="player:hud_set_flags(flags)" type="nil">
+  Sets HUD visibility flags. Accepts a table of booleans. Fields: `hotbar`, `healthbar`, `crosshair`, `wielditem`, `breathbar`, `minimap`, `minimap_radar`, `basic_debug`, `chat`.
+
+  `nil` fields leave the corresponding flag unchanged.
+</ResponseField>
+
+```lua
+-- Add a text HUD element
+local id = player:hud_add({
+    type     = "text",
+    position = {x = 0.5, y = 0.1},
+    text     = "Hello HUD!",
+    number   = 0xFFFFFF,  -- white text
+    scale    = {x = 100, y = 100},
+    alignment = {x = 0, y = 0},
+})
+
+-- Update its text later
+player:hud_change(id, "text", "Updated!")
+
+-- Remove it
+player:hud_remove(id)
+```
+
+### Formspecs and inventory UI
+
+<ResponseField name="player:set_inventory_formspec(formspec)" type="nil">
+  Redefines the player's inventory formspec. Usually called in `on_joinplayer`. Pass `""` to disable the inventory.
+</ResponseField>
+
+<ResponseField name="player:get_inventory_formspec()" type="string">
+  Returns the currently set inventory formspec string.
+</ResponseField>
+
+### Player input
+
+<ResponseField name="player:get_player_control()" type="table">
+  Returns a table of currently pressed keys as booleans. Fields: `up`, `down`, `left`, `right`, `jump`, `aux1`, `sneak`, `dig`, `place`, `zoom`. Also includes `movement_x` and `movement_y` as numbers in [-1.0, 1.0] for joystick/keyboard-unified movement.
+</ResponseField>
+
+### Respawning
+
+<ResponseField name="player:respawn()" type="nil">
+  Respawns the player using the same mechanism as the death screen, including calling `on_respawnplayer` callbacks.
+</ResponseField>

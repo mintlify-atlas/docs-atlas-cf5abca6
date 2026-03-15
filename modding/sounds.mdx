@@ -1,0 +1,306 @@
+---
+title: "Sounds"
+description: "Play positional and non-positional sounds, control looping and fading, and configure node sounds — using Luanti's Ogg Vorbis audio system."
+---
+
+Luanti's audio system is built on OpenAL and supports Ogg Vorbis (`.ogg`) files exclusively. You can play sounds globally (heard by all players), targeted at a single player, or positionally in the world (attenuated by distance).
+
+## Supported format
+
+Only **Ogg Vorbis** (`.ogg`) files are supported.
+
+<Warning>
+For positional sounds, you **must** use **mono (single-channel)** files. Stereo files will be played non-positionally by OpenAL, ignoring the `pos` or `object` parameters.
+</Warning>
+
+Name your sound files with your mod prefix:
+
+```
+mymod_explosion.ogg
+mymod_ambient_wind.ogg
+```
+
+## Sound groups
+
+A **sound group** is a collection of files sharing the same base name, distinguished by a single digit suffix:
+
+```
+mymod_footstep.ogg
+mymod_footstep.0.ogg
+mymod_footstep.1.ogg
+mymod_footstep.2.ogg
+```
+
+When you play `"mymod_footstep"`, Luanti picks one of these files at random. This creates natural variation without any extra code.
+
+## `SimpleSoundSpec`
+
+Most sound APIs accept a `SimpleSoundSpec`, which is either a plain string or a table:
+
+```lua
+-- String form: just the sound name
+"mymod_click"
+
+-- Table form: name with optional overrides
+{
+    name  = "mymod_click",
+    gain  = 0.8,   -- volume: 1.0 = 100%, must be >= 0
+    pitch = 1.2,   -- pitch multiplier; 2.0 = +12 semitones
+    fade  = 0.2,   -- fade in: gain per second until 'gain' is reached
+}
+
+-- Empty: no sound
+""
+{}
+```
+
+`gain`, `pitch`, and `fade` default to `1.0`, `1.0`, and `0.0` respectively.
+
+For positional sounds, `gain` represents the volume at a distance of 3 nodes. OpenAL clamps gain at `1.0` at playback time, but setting a higher value extends the radius of maximum volume. Gain does not increase further inside a 1-node radius.
+
+## Sound parameter table
+
+When calling `core.sound_play`, you pass a sound parameter table alongside the `SimpleSoundSpec`:
+
+```lua
+{
+    gain  = 1.0,   -- scales the SimpleSoundSpec gain
+    pitch = 1.0,   -- overwrites SimpleSoundSpec pitch
+    fade  = 0.0,   -- overwrites SimpleSoundSpec fade
+
+    start_time = 0.0,
+    -- Offset into the sound in seconds. Negative values count from the end:
+    -- start_time = -2 means the sound ends after 2 seconds.
+
+    loop = false,
+    -- If true, the sound loops until stopped or faded to zero.
+
+    pos = {x = 1, y = 2, z = 3},
+    -- Play at this world position (attenuated by distance).
+    -- Cannot be combined with 'object'.
+
+    object = some_objectref,
+    -- Attach to this ObjectRef; sound follows the object.
+    -- Cannot be combined with 'pos'.
+
+    to_player = "Alice",
+    -- Only play for this player.
+    -- Cannot be combined with 'exclude_player'.
+
+    exclude_player = "Alice",
+    -- Play for everyone except this player.
+    -- Cannot be combined with 'to_player'.
+
+    max_hear_distance = 32,
+    -- Maximum distance at which the sound is audible.
+    -- Only effective with 'pos' or 'object'. Default: 32 nodes.
+}
+```
+
+## API functions
+
+### `core.sound_play(spec, parameters, ephemeral)`
+
+Plays a sound and returns a handle.
+
+```lua
+local handle = core.sound_play(
+    "mymod_explosion",
+    { pos = pos, gain = 1.5, max_hear_distance = 64 }
+)
+```
+
+<ParamField path="spec" type="SimpleSoundSpec" required>
+  The sound name or spec table.
+</ParamField>
+
+<ParamField path="parameters" type="table" required>
+  Sound parameter table controlling playback.
+</ParamField>
+
+<ParamField path="ephemeral" type="boolean">
+  Default `false`. When `true`, no handle is returned and the sound cannot be stopped or faded. Recommended for short, fire-and-forget sounds (door clicks, footsteps, UI feedback). Ephemeral sounds consume fewer server resources.
+</ParamField>
+
+### `core.sound_stop(handle)`
+
+Immediately stops a playing sound.
+
+```lua
+core.sound_stop(handle)
+```
+
+### `core.sound_fade(handle, step, gain)`
+
+Gradually changes a sound's volume.
+
+```lua
+core.sound_fade(handle, 0.5, 0.0)  -- fade out at 0.5 gain/second
+```
+
+<ParamField path="handle" type="handle" required>
+  Handle returned by `core.sound_play`.
+</ParamField>
+
+<ParamField path="step" type="number" required>
+  Rate of gain change in gain per second. The absolute value is used (sign is ignored for backwards compatibility).
+</ParamField>
+
+<ParamField path="gain" type="number" required>
+  Target gain. Fading to `0.0` automatically stops and deletes the sound.
+</ParamField>
+
+## Playback examples
+
+<Tabs>
+  <Tab title="Global (all players)">
+    ```lua
+    -- Plays for every connected player, no position
+    core.sound_play("mymod_fanfare", {
+        gain  = 1.0,
+        pitch = 1.0,
+    }, true)  -- ephemeral
+    ```
+  </Tab>
+  <Tab title="Single player">
+    ```lua
+    -- Only Alice hears this
+    core.sound_play("mymod_reward", {
+        to_player = "Alice",
+        gain      = 0.8,
+    }, true)
+    ```
+  </Tab>
+  <Tab title="Positional">
+    ```lua
+    -- World-position sound, audible within 48 nodes
+    core.sound_play("mymod_fire_crackle", {
+        pos               = {x = 10, y = 64, z = -5},
+        gain              = 1.0,
+        max_hear_distance = 48,
+        loop              = true,
+    })
+    ```
+  </Tab>
+  <Tab title="Attached to object">
+    ```lua
+    -- Follows the entity as it moves
+    local handle = core.sound_play("mymod_engine_hum", {
+        object            = entity_ref,
+        gain              = 0.9,
+        max_hear_distance = 24,
+        loop              = true,
+    })
+    -- Stop when entity is removed:
+    -- core.sound_stop(handle)
+    ```
+  </Tab>
+  <Tab title="Exclude player">
+    ```lua
+    -- Everyone hears it except the digger
+    core.sound_play("mymod_mine_sound", {
+        pos            = pos,
+        max_hear_distance = 40,
+        exclude_player = digger_name,
+    }, true)
+    ```
+  </Tab>
+</Tabs>
+
+## Looping with fade out
+
+```lua
+local ambient_handle = core.sound_play("mymod_cave_ambience", {
+    to_player = player_name,
+    gain      = 0.4,
+    loop      = true,
+})
+
+-- Later, when the player leaves a cave:
+core.sound_fade(ambient_handle, 0.3, 0.0)  -- fade out over ~1.3 seconds
+```
+
+## Node sounds
+
+Every node definition can include a `sounds` table that maps game events to `SimpleSoundSpec` values. All fields are optional.
+
+```lua
+core.register_node("mymod:stone", {
+    description = "Stone",
+    tiles       = {"default_stone.png"},
+
+    sounds = {
+        footstep = { name = "default_hard_footstep", gain = 0.3 },
+        -- Played when a player walks on or through the node.
+        -- Gain is multiplied by 0.6 automatically.
+        -- For the local player, played non-positionally at normal gain.
+
+        dig = "__group",
+        -- While digging. "__group" resolves to
+        -- { name = "default_dig_<group>", gain = 0.5 }
+        -- where <group> is the fastest-digging group this tool belongs to.
+
+        dug = { name = "default_dug_node", gain = 0.25 },
+        -- Played once when the node is successfully dug.
+
+        place = { name = "default_place_node", gain = 0.5 },
+        -- Played when the node is placed (also after falling).
+
+        place_failed = { name = "default_place_node_failed", gain = 0.3 },
+        -- Played when built-in placement fails.
+
+        fall = { name = "default_fall_node", gain = 0.5 },
+        -- Played when the node starts to fall or detaches.
+    },
+})
+```
+
+## Special engine sound groups
+
+These sound group names are reserved and played automatically by the engine:
+
+| Name | Event | Default gain |
+|------|-------|--------------|
+| `player_damage` | Local player takes damage | 0.5 |
+| `player_falling_damage` | Local player takes fall damage | 0.5 |
+| `player_jump` | Local player jumps | — |
+| `default_dig_<groupname>` | Digging nodes in `<groupname>` | 0.5 |
+
+You can override these by providing files with the same group name in your mod's `sounds/` directory.
+
+## Complete example: proximity alarm
+
+This example plays an escalating alarm sound when a player walks too close to a restricted area.
+
+```lua
+local ALARM_CENTER = {x = 0, y = 64, z = 0}
+local ALARM_RADIUS = 20
+local alarm_handles = {}
+
+core.register_globalstep(function(dtime)
+    for _, player in ipairs(core.get_connected_players()) do
+        local name = player:get_player_name()
+        local pos  = player:get_pos()
+        local dist = vector.distance(pos, ALARM_CENTER)
+
+        if dist < ALARM_RADIUS and not alarm_handles[name] then
+            alarm_handles[name] = core.sound_play("mymod_alarm", {
+                to_player = name,
+                gain      = 0.2,
+                loop      = true,
+            })
+        elseif dist >= ALARM_RADIUS and alarm_handles[name] then
+            core.sound_fade(alarm_handles[name], 1.0, 0.0)
+            alarm_handles[name] = nil
+        end
+    end
+end)
+
+core.register_on_leaveplayer(function(player)
+    local name = player:get_player_name()
+    if alarm_handles[name] then
+        core.sound_stop(alarm_handles[name])
+        alarm_handles[name] = nil
+    end
+end)
+```

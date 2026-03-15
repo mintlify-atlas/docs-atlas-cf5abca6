@@ -1,0 +1,207 @@
+---
+title: "Settings API"
+description: "Reference for reading and writing Luanti settings via core.settings and the Settings class, including the settingtypes.txt format."
+---
+
+Luanti exposes its configuration system through the `Settings` class. `core.settings` is a pre-created `Settings` instance bound to the main `minetest.conf` file.
+
+## core.settings
+
+`core.settings` provides access to all engine and mod settings from `minetest.conf`. Engine settings have internal defaults; mod settings do not.
+
+```lua
+-- Read a setting
+local level = core.settings:get("water_level")
+
+-- Read with a default
+local creative = core.settings:get_bool("creative_mode", false)
+```
+
+## Settings methods
+
+### Reading settings
+
+<ParamField path="settings:get(key)" type="function">
+  Returns the value of `key` as a string, or `nil` if the key is not set.
+
+  - `key` (string): The setting name.
+
+  **Returns:** `string` or `nil`
+</ParamField>
+
+<ParamField path="settings:get_bool(key[, default])" type="function">
+  Returns the value of `key` as a boolean.
+
+  - `key` (string): The setting name.
+  - `default` (boolean, optional): Returned if `key` is not found.
+
+  **Returns:** `boolean` or `nil` if key is not found and no default is provided.
+</ParamField>
+
+<ParamField path="settings:get_np_group(key)" type="function">
+  Returns the value of `key` as a `NoiseParams` table, or `nil` if not found.
+
+  **Returns:** `NoiseParams` table or `nil`
+
+  ```lua
+  -- NoiseParams table format
+  {
+      offset      = 0,
+      scale       = 1,
+      spread      = {x=500, y=500, z=500},
+      seed        = 12345,
+      octaves     = 5,
+      persistence = 0.63,
+      lacunarity  = 2.0,
+      flags       = "defaults, absvalue",
+  }
+  ```
+</ParamField>
+
+<ParamField path="settings:get_flags(key)" type="function">
+  Returns the flags for `key` as a `{flag=true/false, ...}` table, or `nil` if not found. Currently limited to mapgen flags like `mg_flags` and mapgen-specific flags.
+
+  **Returns:** table or `nil`
+</ParamField>
+
+<ParamField path="settings:get_pos(key)" type="function">
+  Returns the value of `key` as a position vector, or `nil` if not found or parsing fails.
+
+  **Returns:** vector or `nil`
+</ParamField>
+
+<ParamField path="settings:has(key)" type="function">
+  Returns `true` if `key` is explicitly set (ignoring defaults). Use this when you need to distinguish between a default value and an explicit setting.
+
+  **Returns:** `boolean`
+
+  <Note>On `core.settings`, `get(key)` can return a value even when `has(key)` returns `false`, because engine settings have internal defaults.</Note>
+</ParamField>
+
+<ParamField path="settings:get_names()" type="function">
+  Returns a list of all explicitly set key names.
+
+  **Returns:** `table` of strings
+</ParamField>
+
+<ParamField path="settings:to_table()" type="function">
+  Returns all settings as a `{[key1]=value1, ...}` table.
+
+  **Returns:** `table`
+</ParamField>
+
+### Writing settings
+
+<ParamField path="settings:set(key, value)" type="function">
+  Sets `key` to `value`.
+
+  - `key` (string): Must not contain whitespace or `="{}#`. Keys starting with `"secure."` cannot be set on `core.settings`.
+  - `value` (string): Must not contain `\n"""`.
+</ParamField>
+
+<ParamField path="settings:set_bool(key, value)" type="function">
+  Sets `key` to a boolean value. Same restrictions as `set()`.
+</ParamField>
+
+<ParamField path="settings:set_np_group(key, value)" type="function">
+  Sets `key` to a `NoiseParams` table value.
+
+  - `value` (table): A `NoiseParams` table.
+</ParamField>
+
+<ParamField path="settings:set_pos(key, value)" type="function">
+  Sets `key` to a position vector.
+
+  - `value` (vector): A position `{x, y, z}`.
+</ParamField>
+
+<ParamField path="settings:remove(key)" type="function">
+  Removes `key` from the settings.
+
+  **Returns:** `boolean` (true on success)
+</ParamField>
+
+<ParamField path="settings:write()" type="function">
+  Persists all changes to the underlying file on disk.
+
+  **Returns:** `boolean` (true on success)
+</ParamField>
+
+## Creating Settings instances
+
+You can create `Settings` instances for arbitrary config files:
+
+```lua
+local my_config = Settings(core.get_worldpath() .. "/mymod.conf")
+my_config:set("my_setting", "hello")
+my_config:write()
+
+-- Later, read it back
+local val = my_config:get("my_setting")  -- "hello"
+```
+
+## Practical examples
+
+```lua
+-- Read a custom mod setting with a default value
+local max_mobs = tonumber(core.settings:get("mymod_max_mobs")) or 10
+
+-- Conditionally enable a feature
+if core.settings:get_bool("mymod_enable_feature", true) then
+    -- feature is enabled
+end
+
+-- Persist a world-specific value
+local world_conf = Settings(core.get_worldpath() .. "/mymod.conf")
+world_conf:set("spawn_y", tostring(spawn_pos.y))
+world_conf:write()
+```
+
+## settingtypes.txt
+
+To expose mod settings in the main menu's settings dialog, create a `settingtypes.txt` in your mod directory. The menu parses this file and displays settings under the "Mods" category.
+
+Format:
+
+```
+# Comment
+setting_name (Display Name) type default_value
+    # Tooltip text
+
+# Examples:
+mymod_max_mobs (Max Mobs) int 10
+mymod_enable_pvp (Enable PvP) bool true
+mymod_speed_factor (Speed Factor) float 1.0
+mymod_spawn_biome (Spawn Biome) string forest
+```
+
+Supported setting types:
+
+| Type | Description |
+|---|---|
+| `int` | Integer value |
+| `float` | Floating-point value |
+| `bool` | Boolean (`true`/`false`) |
+| `string` | Arbitrary string |
+| `enum` | One of a fixed set: `enum default val1,val2,val3` |
+| `path` | Filesystem path |
+| `flags` | Comma-separated flags |
+| `noise_params_2d` | 2D noise parameter group |
+| `noise_params_3d` | 3D noise parameter group |
+| `v3f` | 3D vector |
+
+<Tip>
+Read `builtin/settingtypes.txt` in the Luanti source for extensive examples of every setting type and its syntax.
+</Tip>
+
+## Settings file format
+
+The settings file uses `key = value` syntax:
+
+```
+foo = example text
+bar = """
+Multiline
+value
+"""
+```

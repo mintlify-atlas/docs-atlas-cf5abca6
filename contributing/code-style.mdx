@@ -1,0 +1,206 @@
+---
+title: "Code Style Guidelines"
+description: "C++ and Lua code style conventions for Luanti engine contributions, including naming conventions, clang-tidy rules, and file organisation."
+---
+
+Consistent code style makes the codebase easier to read, review, and maintain. Luanti enforces style for both C++ and Lua code.
+
+## C++ Code Style
+
+The full C++ code style guide is published at:
+
+**[docs.luanti.org/for-engine-devs/code-style-guidelines/](https://docs.luanti.org/for-engine-devs/code-style-guidelines/)**
+
+The highlights:
+
+- Indentation: **tabs** (not spaces)
+- Opening braces on the **same line** as the statement
+- `snake_case` for variables and functions
+- `PascalCase` for classes and structs
+- `UPPER_SNAKE_CASE` for constants and macros
+- `m_` prefix for private/protected member variables
+- `g_` prefix for global variables
+- Include guards use `#pragma once`
+- Use `nullptr` rather than `NULL` or `0` for pointers
+- Prefer `auto` only when the type is obvious from context
+- Avoid raw owning pointers — prefer `std::unique_ptr` or `std::shared_ptr`
+
+### Example
+
+```cpp
+class MyClass
+{
+public:
+	MyClass(int value) : m_value(value) {}
+
+	int getValue() const { return m_value; }
+
+	void doSomething(const std::string &name)
+	{
+		if (name.empty()) {
+			return;
+		}
+		m_name = name;
+	}
+
+private:
+	int m_value;
+	std::string m_name;
+};
+```
+
+## Lua Code Style
+
+The Lua code style guide is published at:
+
+**[docs.luanti.org/for-engine-devs/lua-code-style-guidelines/](https://docs.luanti.org/for-engine-devs/lua-code-style-guidelines/)**
+
+Key conventions:
+
+- Indentation: **tabs** (consistent with C++)
+- `snake_case` for variables, functions, and fields
+- Local variables are preferred over globals: always use `local` unless a global is intentional
+- Avoid `pairs()` on sequential tables where `ipairs()` is correct
+- Use `--` for single-line comments and `--[[  ]]` for block comments
+- Prefer named functions over anonymous ones in callbacks when the function is non-trivial
+- Module-level variables should be declared at the top of the file
+
+### Example
+
+```lua
+local my_module = {}
+
+local function helper(player_name)
+	if not player_name or player_name == "" then
+		return false
+	end
+	return true
+end
+
+function my_module.register_stuff()
+	core.register_chatcommand("hello", {
+		description = "Say hello",
+		privs = { interact = true },
+		func = function(name, param)
+			if not helper(name) then
+				return false, "Invalid player name."
+			end
+			core.chat_send_all(name .. " says hello!")
+			return true
+		end,
+	})
+end
+
+return my_module
+```
+
+## Naming Conventions
+
+| Construct | Convention | Example |
+|---|---|---|
+| C++ class / struct | `PascalCase` | `ServerEnvironment` |
+| C++ function / method | `camelCase` | `getPlayerCount()` |
+| C++ variable | `snake_case` | `player_name` |
+| C++ private member | `m_snake_case` | `m_player_count` |
+| C++ global variable | `g_snake_case` | `g_settings` |
+| C++ constant / macro | `UPPER_SNAKE_CASE` | `MAX_PACKET_SIZE` |
+| Lua function / variable | `snake_case` | `player_name` |
+| Lua module | `snake_case` | `my_module` |
+| Files (C++ source) | `snake_case.cpp` | `server_environment.cpp` |
+| Files (C++ header) | `snake_case.h` | `server_environment.h` |
+
+## File Organisation
+
+```
+src/
+├── server/            ─ Server subsystems
+├── client/            ─ Client subsystems
+├── mapgen/            ─ Map generation
+├── script/            ─ Lua scripting bridge
+│   ├── cpp_api/       ─ C++ → Lua API bindings
+│   └── lua_api/       ─ Lua API implementations
+├── network/           ─ Networking layer
+└── util/              ─ Shared utility code
+builtin/
+├── game/              ─ Built-in game Lua scripts
+├── mainmenu/          ─ Main menu Lua scripts
+└── profiler/          ─ Built-in profiler
+```
+
+Keep new source files in the most specific applicable subdirectory. Header files live alongside their `.cpp` counterparts.
+
+## clang-tidy
+
+Luanti ships a `.clang-tidy` configuration at the root of the repository. It enforces a focused set of checks:
+
+```yaml
+# .clang-tidy
+Checks: >-
+  -*,
+  modernize-use-emplace,
+  modernize-avoid-bind,
+  misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
+  performance-*,
+  -performance-avoid-endl,
+  performance-inefficient-string-concatenation
+WarningsAsErrors: >-
+  -*,
+  modernize-use-emplace,
+  performance-type-promotion-in-math-fn,
+  performance-faster-string-find,
+  performance-implicit-cast-in-loop
+CheckOptions:
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: "v[23]f;v[23][su](16|32)"
+```
+
+### What the checks enforce
+
+| Check | Effect |
+|---|---|
+| `modernize-use-emplace` | Prefer `emplace_back` over `push_back` with a constructed object |
+| `modernize-avoid-bind` | Replace `std::bind` with lambdas |
+| `misc-throw-by-value-catch-by-reference` | Throw exceptions by value; catch by reference |
+| `misc-unconventional-assign-operator` | Ensure correct return type and parameter for `operator=` |
+| `performance-*` | Broad set of performance improvements (minus `avoid-endl`) |
+| `performance-inefficient-string-concatenation` | Avoid repeated `+` string concatenation in loops |
+
+The following performance checks are promoted to **errors** (they will fail the build):
+
+- `performance-type-promotion-in-math-fn` — avoid implicit float-to-double promotion in math calls
+- `performance-faster-string-find` — use single-character overload of `find` where possible
+- `performance-implicit-cast-in-loop` — avoid implicit casts in range-based for loops
+
+Run clang-tidy locally with:
+
+```bash
+cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -GNinja
+cmake --build build
+clang-tidy -p build src/server/server.cpp
+```
+
+Or run it on all changed files:
+
+```bash
+git diff --name-only HEAD | grep '\.cpp$' | \
+  xargs clang-tidy -p build
+```
+
+## Commit Message Style
+
+Write commit messages in the imperative mood, with a concise subject line (≤72 characters) and an optional body explaining the motivation:
+
+```
+Fix crash when player disconnects during mapgen
+
+The server was dereferencing a player pointer that had already been
+freed when a disconnect race occurred with mapgen completion.
+Add a null-check before accessing the player object.
+```
+
+Reference GitHub issues when relevant:
+
+```
+Fix inventory duplication bug (#12345)
+```

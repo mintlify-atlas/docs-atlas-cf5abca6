@@ -1,0 +1,180 @@
+---
+title: "Contributing to Luanti"
+description: "How to contribute to the Luanti voxel game engine, from setting up a development environment to submitting pull requests and running tests."
+---
+
+Luanti welcomes contributions from the community. This page covers everything you need to get started, from understanding the project structure to submitting your first pull request.
+
+## Ways to Contribute
+
+<CardGroup cols={2}>
+  <Card title="Bug Reports" icon="bug">
+    Open an issue on [GitHub](https://github.com/luanti-org/luanti/issues) with a clear description of the problem, steps to reproduce, and your Luanti version and platform.
+  </Card>
+  <Card title="Code Contributions" icon="code">
+    Fork the repository, create a branch, make your changes, and open a pull request against the `master` branch.
+  </Card>
+  <Card title="Documentation" icon="book">
+    Improvements to [docs.luanti.org](https://docs.luanti.org) are maintained separately. Check the docs repository for contribution guidelines.
+  </Card>
+  <Card title="Translations" icon="language">
+    Engine translations are managed on [Weblate](https://hosted.weblate.org/engage/minetest/). No coding required.
+  </Card>
+</CardGroup>
+
+## Development Resources
+
+Before diving in, familiarise yourself with the following resources:
+
+- [Luanti Documentation](https://docs.luanti.org/) — official developer and user docs
+- [Releasing Luanti](https://docs.luanti.org/for-engine-devs/releasing-luanti/) — release process
+- [Organisation](https://docs.luanti.org/for-engine-devs/organization/) — team structure and decision making
+- [Code style guidelines](https://docs.luanti.org/for-engine-devs/code-style-guidelines/) — C++ style reference
+- [Lua code style guidelines](https://docs.luanti.org/for-engine-devs/lua-code-style-guidelines/) — Lua style reference
+- [#luanti-dev IRC](https://docs.luanti.org/about/irc/) — real-time discussion with core developers
+
+<Info>
+  Many things aren't written down yet. If you're stuck on an engine internals question, ask in `#luanti-dev` IRC — core developers are active there.
+</Info>
+
+## Setting Up a Development Environment
+
+<Tabs>
+  <Tab title="Native (Linux)">
+    Install build dependencies (Debian/Ubuntu example):
+
+    ```bash
+    sudo apt-get install -y \
+      git cmake build-essential \
+      libsqlite3-dev libpq-dev libleveldb-dev libhiredis-dev \
+      libgmp-dev libjsoncpp-dev libzstd-dev libcurl4-openssl-dev \
+      ninja-build
+    ```
+
+    Clone and build in debug mode:
+
+    ```bash
+    git clone https://github.com/luanti-org/luanti.git
+    cd luanti
+    cmake -B build \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DBUILD_SERVER=TRUE \
+      -DBUILD_UNITTESTS=TRUE \
+      -GNinja
+    cmake --build build
+    ```
+  </Tab>
+  <Tab title="Docker">
+    Use the development Docker image to avoid installing dependencies locally:
+
+    ```bash
+    docker buildx build --target dev -t minetest-dev:0 .
+    docker run -it \
+      --mount type=bind,source=$(pwd),target=/minetest \
+      minetest-dev:0
+    ```
+
+    Inside the container, build as normal using cmake. All required libraries are already installed.
+
+    See [Developing with Docker](../server/docker#developing-with-docker) for full details.
+  </Tab>
+</Tabs>
+
+## Debug Builds
+
+Build with `-DCMAKE_BUILD_TYPE=Debug` to enable debug symbols, assertions, and additional runtime checks:
+
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DBUILD_SERVER=TRUE \
+  -DBUILD_CLIENT=TRUE \
+  -GNinja
+cmake --build build
+```
+
+For profiling without losing too much performance, use `RelWithDebInfo`:
+
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -GNinja
+```
+
+<Note>
+  Debug builds are significantly slower than release builds. Use `RelWithDebInfo` when profiling to get usable flamegraphs with reasonable runtime performance.
+</Note>
+
+## Running Unit Tests
+
+Enable unit tests with `-DBUILD_UNITTESTS=TRUE` at configure time:
+
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DBUILD_UNITTESTS=TRUE \
+  -GNinja
+cmake --build build
+```
+
+Run all tests:
+
+```bash
+./build/bin/luanti --run-unittests
+```
+
+Make sure all unit tests pass before submitting a pull request.
+
+## GitHub Workflow
+
+<Steps>
+  <Step title="Fork and clone">
+    Fork the repository on GitHub, then clone your fork:
+
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/luanti.git
+    cd luanti
+    git remote add upstream https://github.com/luanti-org/luanti.git
+    ```
+  </Step>
+  <Step title="Create a feature branch">
+    Always branch from `master`:
+
+    ```bash
+    git checkout master
+    git pull upstream master
+    git checkout -b my-feature
+    ```
+  </Step>
+  <Step title="Make your changes">
+    Write code, add tests where appropriate, and ensure the project still builds. Run the unit tests.
+  </Step>
+  <Step title="Commit with a clear message">
+    Write a descriptive commit message explaining *why* the change was made, not just *what* changed:
+
+    ```bash
+    git add -p
+    git commit -m "Fix crash when player disconnects during mapgen"
+    ```
+  </Step>
+  <Step title="Open a pull request">
+    Push your branch and open a pull request against `luanti-org/luanti:master`. Fill in the PR template with a clear description of what the change does and why.
+
+    ```bash
+    git push origin my-feature
+    ```
+  </Step>
+</Steps>
+
+## Notable Developer Documentation
+
+The `doc/developing/` directory in the source tree contains developer-specific references:
+
+| File | Topic |
+|---|---|
+| `docker.md` | Developing the server with Docker |
+| `android.md` | Android-specific tips and tricks |
+| `os-compatibility.md` | OS and library compatibility policy |
+| `profiling.md` | Profiling instructions |
+
+Online at [docs.luanti.org](https://docs.luanti.org/), you'll also find the changelog, translation guide, and release procedures.

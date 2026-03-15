@@ -1,0 +1,146 @@
+---
+title: "Game creation overview"
+description: "Learn what a Luanti game is, how it relates to mods, and how to create one from scratch."
+---
+
+A **game** in Luanti is a self-contained collection of mods, configuration, and assets that defines a complete playable experience. Unlike a standalone mod, a game ships its own set of mods inside a `mods/` directory, controls which map generators are available, and can customize the main menu appearance. Players select a game when creating a new world.
+
+## Games vs. mods
+
+<CardGroup cols={2}>
+  <Card title="Game" icon="gamepad-2">
+    A curated bundle of mods, configuration, and media that defines a full game experience. Loaded when a world is created and cannot be changed afterwards.
+  </Card>
+  <Card title="Mod" icon="puzzle">
+    A self-contained script/texture package that extends or modifies game behaviour. Can be installed on top of any game.
+  </Card>
+</CardGroup>
+
+Games include their own mods, so every mod inside a game's `mods/` directory is always active for worlds that use that game. Players can also install additional mods on top of a game.
+
+## Where games are stored
+
+Luanti searches for games in two locations:
+
+| Path | Purpose |
+|------|---------|
+| `$path_share/games/<gameid>/` | Read-only games distributed with Luanti or installed system-wide |
+| `$path_user/games/<gameid>/` | Games installed by the user |
+
+The `<gameid>` directory name is the unique identifier for your game. On Linux, `path_share` is typically `/usr/share/minetest` and `path_user` is `~/.minetest`. On Windows, `path_user` is `%APPDATA%\Minetest`.
+
+<Tip>
+  Place your game under `$path_user/games/<gameid>/` during development so you don't need elevated permissions to edit it.
+</Tip>
+
+## Game directory structure
+
+The following files and directories are recognized inside a game directory:
+
+<Tree>
+  <Tree.Folder name="<gameid>" defaultOpen>
+    <Tree.File name="game.conf" />
+    <Tree.File name="minetest.conf" />
+    <Tree.File name="screenshot.png" />
+    <Tree.File name="settingtypes.txt" />
+    <Tree.Folder name="menu" defaultOpen>
+      <Tree.File name="background.png" />
+      <Tree.File name="overlay.png" />
+      <Tree.File name="footer.png" />
+      <Tree.File name="header.png" />
+      <Tree.File name="theme.ogg" />
+    </Tree.Folder>
+    <Tree.Folder name="mods" defaultOpen>
+      <Tree.Folder name="mymod">
+        <Tree.File name="init.lua" />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.Folder name="textures" />
+  </Tree.Folder>
+</Tree>
+
+| File / directory | Description |
+|-----------------|-------------|
+| `game.conf` | Required metadata and configuration for the game. See [game.conf reference](/games/game-conf). |
+| `minetest.conf` | Default settings applied when running this game. |
+| `screenshot.{png,jpg,jpeg}` | Preview image shown in the main menu. |
+| `settingtypes.txt` | Game-specific settings displayed in the **Games** category of the advanced settings tab. Uses the same format as the built-in `settingtypes.txt`. |
+| `menu/` | Custom main menu images and music. See [Menu images and music](/games/menu-images). |
+| `mods/` | Mods bundled with the game. |
+| `textures/` | Additional textures loaded according to the texture loading order. |
+
+## How games relate to mods
+
+Every piece of gameplay logic in a Luanti game is implemented in Lua mods. A game is essentially a curated set of mods loaded together:
+
+- Mods inside `mods/` are automatically enabled for all worlds using the game.
+- You can control load order with `first_mod` and `last_mod` in `game.conf`.
+- Players can install additional mods on top of your game just like any other game.
+
+Mods are loaded during server startup. Each mod's `init.lua` is executed in a shared environment, so mods can interact with each other through the `core` API.
+
+```lua
+-- Example: registering a node inside a game mod (mods/mymod/init.lua)
+core.register_node("mymod:stone", {
+    description = "My Stone",
+    tiles = {"mymod_stone.png"},
+    groups = {cracky = 3},
+})
+```
+
+## Creating a new game
+
+<Steps>
+  <Step title="Choose a game ID">
+    Pick a short, lowercase identifier with no spaces, e.g. `mygame`. This becomes the directory name and must be unique.
+  </Step>
+
+  <Step title="Create the game directory">
+    Create the directory at `$path_user/games/mygame/`.
+
+    ```bash
+    mkdir -p ~/.minetest/games/mygame
+    ```
+  </Step>
+
+  <Step title="Write game.conf">
+    Create `game.conf` with at minimum a `title` key:
+
+    ```ini
+    title = My Game
+    description = A short description shown in the content tab.
+    ```
+
+    See the full [game.conf reference](/games/game-conf) for all available keys.
+  </Step>
+
+  <Step title="Add a screenshot">
+    Place a `screenshot.png` (or `.jpg`) in the game directory. This image is shown in the main menu when players select your game.
+  </Step>
+
+  <Step title="Create your first mod">
+    Add a mod directory under `mods/`. Each mod needs at minimum a `mod.conf` (with a `name` key) and an `init.lua`.
+
+    ```bash
+    mkdir -p ~/.minetest/games/mygame/mods/mymod
+    ```
+
+    ```ini
+    # mods/mymod/mod.conf
+    name = mymod
+    ```
+
+    ```lua
+    -- mods/mymod/init.lua
+    core.log("action", "mymod loaded!")
+    ```
+  </Step>
+
+  <Step title="Launch Luanti and create a world">
+    Start Luanti, select your game from the main menu, and create a new world. Your game and its bundled mods will be loaded automatically.
+  </Step>
+</Steps>
+
+<Note>
+  A `game.conf` with a valid `title` key is the minimum required to make your game appear in the main menu.
+</Note>

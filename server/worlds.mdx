@@ -1,0 +1,303 @@
+---
+title: "World Management"
+description: "How Luanti worlds are structured on disk, how to create and configure them, available storage backends, and strategies for migration and backup."
+---
+
+A Luanti world is a directory containing map data, player data, authentication, and metadata. Worlds are stored under `user/worlds/` by default (e.g., `~/.minetest/worlds/` on Linux).
+
+## World Directory Structure
+
+A typical world directory looks like this:
+
+```
+myworld/
+├── auth.txt          ─ Authentication data (files backend)
+├── auth.sqlite       ─ Authentication data (sqlite3 backend)
+├── env_meta.txt      ─ Environment metadata (game time, etc.)
+├── ipban.txt         ─ Banned IPs and usernames
+├── map_meta.txt      ─ Map metadata (world seed)
+├── map.sqlite        ─ Map data (SQLite3 backend)
+├── players/          ─ Player data directory
+│   ├── alice
+│   └── bob
+└── world.mt          ─ World metadata and backend configuration
+```
+
+### Key Files
+
+**`world.mt`** — The primary configuration file for a world. It specifies the game, enabled mods, and storage backends:
+
+```ini
+gameid = minetest
+enable_damage = true
+creative_mode = false
+backend = sqlite3
+player_backend = sqlite3
+auth_backend = files
+mod_storage_backend = sqlite3
+server_announce = false
+world_name = My World
+load_mod_mymod = true
+```
+
+**`env_meta.txt`** — Stores running environment state such as game time:
+
+```ini
+game_time = 73471
+time_of_day = 19118
+EnvArgsEnd
+```
+
+**`map_meta.txt`** — Stores the world seed and other map-level metadata:
+
+```ini
+seed = 7980462765762429666
+[end_of_params]
+```
+
+**`ipban.txt`** — Contains banned IP/username pairs, one per line:
+
+```
+123.456.78.9|foo
+123.456.78.10|bar
+```
+
+**`auth.txt`** — Player credentials and privileges (when using the `files` auth backend):
+
+```
+celeron55::interact,shout
+foo:#1#hPpy4O3IAn1hsNK00A6wNw#<verifier>:shout
+bar::
+```
+
+## Creating a New World
+
+You can create a world via the CLI by simply pointing `luantiserver` at a directory that does not exist yet, or by creating the `world.mt` manually.
+
+<Steps>
+  <Step title="Create the world directory">
+    ```bash
+    mkdir -p ~/.minetest/worlds/myworld
+    ```
+  </Step>
+  <Step title="Write the world.mt file">
+    ```bash
+    cat > ~/.minetest/worlds/myworld/world.mt <<'EOF'
+    gameid = minetest
+    backend = sqlite3
+    player_backend = sqlite3
+    auth_backend = files
+    EOF
+    ```
+  </Step>
+  <Step title="Start the server">
+    ```bash
+    luantiserver --world ~/.minetest/worlds/myworld --gameid minetest
+    ```
+
+    The server generates the map seed and remaining metadata files on first run.
+  </Step>
+</Steps>
+
+## Storage Backends
+
+Luanti supports separate backends for map data, player data, auth data, and mod storage. Configure each in `world.mt`.
+
+### Map Backend (`backend`)
+
+Stores MapBlock data — the 16×16×16 node chunks that make up the world.
+
+<Tabs>
+  <Tab title="SQLite3 (default)">
+    The default and most portable backend. Stores everything in `map.sqlite`.
+
+    ```ini
+    backend = sqlite3
+    ```
+
+    The SQLite schema:
+    ```sql
+    CREATE TABLE blocks (
+        x INTEGER, y INTEGER, z INTEGER,
+        data BLOB NOT NULL,
+        PRIMARY KEY (x, z, y)
+    );
+    ```
+  </Tab>
+  <Tab title="LevelDB">
+    A high-throughput embedded key-value store. Requires the engine to be built with LevelDB support.
+
+    ```ini
+    backend = leveldb
+    ```
+  </Tab>
+  <Tab title="PostgreSQL">
+    An external PostgreSQL database. Suitable for large deployments, replication, and shared hosting.
+
+    ```ini
+    backend = postgresql
+    pgsql_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+    ```
+  </Tab>
+  <Tab title="Redis">
+    An external Redis store. Requires the engine built with Redis (hiredis) support.
+
+    ```ini
+    backend = redis
+    redis_address = 127.0.0.1
+    redis_hash = luanti_map
+    redis_port = 6379
+    redis_password = hunter2
+    ```
+  </Tab>
+</Tabs>
+
+### Player Backend (`player_backend`)
+
+Stores player position, inventory, and metadata.
+
+Supported values: `sqlite3`, `postgresql`.
+
+```ini
+player_backend = sqlite3
+# or:
+player_backend = postgresql
+pgsql_player_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+```
+
+### Auth Backend (`auth_backend`)
+
+Stores player credentials and privilege lists.
+
+Supported values: `files`, `sqlite3`, `postgresql`.
+
+```ini
+auth_backend = sqlite3
+# or:
+auth_backend = postgresql
+pgsql_auth_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+```
+
+The SQLite3 auth schema uses two tables:
+
+```sql
+CREATE TABLE auth (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(32) UNIQUE,
+    password VARCHAR(512),
+    last_login INTEGER
+);
+CREATE TABLE user_privileges (
+    id INTEGER,
+    privilege VARCHAR(32),
+    PRIMARY KEY (id, privilege),
+    CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES auth (id) ON DELETE CASCADE
+);
+```
+
+### Mod Storage Backend (`mod_storage_backend`)
+
+Stores key-value data saved by mods via the mod storage API.
+
+Supported values: `sqlite3`, `postgresql`, `files`, `dummy`.
+
+```ini
+mod_storage_backend = sqlite3
+```
+
+### Read-Only Seed Database (`readonly_backend`)
+
+You can provide a pre-generated read-only map database as a seed:
+
+```ini
+readonly_backend = sqlite3
+```
+
+The file must be placed in a `readonly/` subdirectory inside the world folder.
+
+## Enabling Mods in a World
+
+List mods to load in `world.mt` using `load_mod_<modname>`:
+
+```ini
+load_mod_mymod = true
+load_mod_anothermod = mods/mymodpack/anothermod
+load_mod_oldmod = false
+```
+
+Relative paths must start with `mods/` (user mods), `share/` (system mods), or use an absolute path under a directory listed in `LUANTI_MOD_PATH`.
+
+## Migrating Between Backends
+
+Luanti includes a `--migrate` CLI option to convert a world's map data from one backend to another.
+
+<Steps>
+  <Step title="Stop the server">
+    Ensure no server process is writing to the world before migrating.
+  </Step>
+  <Step title="Run the migration">
+    ```bash
+    luantiserver --world ~/.minetest/worlds/myworld \
+      --gameid minetest \
+      --migrate postgresql
+    ```
+
+    This reads from the current `backend` in `world.mt` and writes to the new backend you specify. After migration, update `world.mt` to point to the new backend.
+  </Step>
+  <Step title="Update world.mt">
+    Edit `world.mt` to set the new backend:
+
+    ```ini
+    backend = postgresql
+    pgsql_connection = host=127.0.0.1 port=5432 user=mt_user password=mt_password dbname=minetest
+    ```
+  </Step>
+  <Step title="Restart the server and verify">
+    Start the server and confirm the world loads correctly before removing the old data files.
+  </Step>
+</Steps>
+
+Similar flags exist for other data types: `--migrate-players`, `--migrate-auth`, and `--migrate-mod-storage`.
+
+## Backup Strategies
+
+<Warning>
+  Always stop the server before copying SQLite databases. A live copy of an actively written SQLite file can produce a corrupt backup.
+</Warning>
+
+<Tabs>
+  <Tab title="SQLite3 (offline copy)">
+    Stop the server, then copy the world directory:
+
+    ```bash
+    systemctl stop luanti
+    cp -r ~/.minetest/worlds/myworld /backups/myworld-$(date +%Y%m%d)
+    systemctl start luanti
+    ```
+  </Tab>
+  <Tab title="SQLite3 (online backup)">
+    Use SQLite's `.backup` command for a consistent online backup without stopping the server:
+
+    ```bash
+    sqlite3 ~/.minetest/worlds/myworld/map.sqlite \
+      ".backup /backups/map-$(date +%Y%m%d).sqlite"
+    ```
+  </Tab>
+  <Tab title="PostgreSQL">
+    Use `pg_dump` for consistent online backups:
+
+    ```bash
+    pg_dump -U mt_user -d minetest -F c \
+      -f /backups/minetest-$(date +%Y%m%d).dump
+    ```
+  </Tab>
+</Tabs>
+
+### Authentication and Player Data
+
+Don't forget to back up `auth.txt` (or `auth.sqlite`) and the `players/` directory — these are separate from the map data and are critical for preserving player accounts and inventories.
+
+```bash
+cp ~/.minetest/worlds/myworld/auth.txt /backups/
+cp -r ~/.minetest/worlds/myworld/players/ /backups/players-$(date +%Y%m%d)/
+```

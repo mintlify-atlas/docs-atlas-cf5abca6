@@ -1,0 +1,151 @@
+---
+title: "Menu images and music"
+description: "Customize the Luanti main menu with game-specific background images, overlays, headers, footers, and music."
+---
+
+You can give your game a unique look in the Luanti main menu by providing custom images and background music. All menu assets go inside a `menu/` directory at the root of your game directory.
+
+```
+<gameid>/
+└── menu/
+    ├── background.png
+    ├── overlay.png
+    ├── header.png
+    ├── footer.png
+    └── theme.ogg
+```
+
+## Menu images
+
+Each image slot in the main menu is identified by a string called an **identifier**. You provide a PNG file named `<identifier>.png` and Luanti will use it automatically when your game is selected.
+
+### Image identifiers
+
+<CardGroup cols={2}>
+  <Card title="background" icon="image">
+    The full-screen background image displayed behind all menu elements.
+  </Card>
+  <Card title="overlay" icon="layers">
+    An image composited on top of the background, useful for adding a vignette or branding layer.
+  </Card>
+  <Card title="header" icon="panel-top">
+    An image placed at the top of the menu.
+  </Card>
+  <Card title="footer" icon="panel-bottom">
+    An image placed at the bottom of the menu.
+  </Card>
+</CardGroup>
+
+### Single image
+
+To use one image for an identifier, name the file `<identifier>.png`:
+
+```
+menu/
+├── background.png
+├── overlay.png
+├── header.png
+└── footer.png
+```
+
+### Multiple images
+
+If you provide more than one image for an identifier, Luanti picks one at random each time the menu is shown. Name additional images `<identifier>.<n>.png`, where `<n>` is an ascending integer starting from `1`.
+
+```
+menu/
+├── background.png      ← base image (also used when n=0 is implied)
+├── background.1.png    ← randomly chosen alternative
+├── background.2.png    ← randomly chosen alternative
+└── background.3.png    ← randomly chosen alternative
+```
+
+<Info>
+  There is no enforced upper limit on the number of images per identifier. Add as many numbered variants as you like.
+</Info>
+
+### Example: adding a background
+
+<Steps>
+  <Step title="Create the menu directory">
+    ```bash
+    mkdir -p ~/.minetest/games/mygame/menu
+    ```
+  </Step>
+
+  <Step title="Add your image">
+    Copy or create a PNG file and place it in the `menu/` directory:
+
+    ```bash
+    cp my_background.png ~/.minetest/games/mygame/menu/background.png
+    ```
+  </Step>
+
+  <Step title="Verify in the main menu">
+    Launch Luanti and select your game. The main menu background should now show your custom image.
+  </Step>
+</Steps>
+
+## Menu music
+
+You can provide background music that plays in the main menu when your game is selected. Music files must be in Ogg Vorbis format and placed inside the `menu/` directory.
+
+### Single track
+
+Name your music file `theme.ogg`:
+
+```
+menu/
+└── theme.ogg
+```
+
+### Multiple tracks
+
+If you want Luanti to pick a track at random, provide additional files named `theme.<n>.ogg`, where `<n>` is an ascending integer starting from `1`. The maximum number of numbered tracks is **10**.
+
+```
+menu/
+├── theme.ogg       ← played when no numbered variant is chosen
+├── theme.1.ogg
+├── theme.2.ogg
+├── theme.3.ogg
+```
+
+<Warning>
+  Numbered music files go up to `theme.10.ogg` at most. Files numbered higher than 10 are not loaded.
+</Warning>
+
+### Example: adding menu music
+
+<Steps>
+  <Step title="Prepare your audio file">
+    Encode your music as Ogg Vorbis (`.ogg`). Most audio editors and converters support this format.
+  </Step>
+
+  <Step title="Place the file in the menu directory">
+    ```bash
+    cp mytheme.ogg ~/.minetest/games/mygame/menu/theme.ogg
+    ```
+
+    For multiple tracks:
+
+    ```bash
+    cp track1.ogg ~/.minetest/games/mygame/menu/theme.1.ogg
+    cp track2.ogg ~/.minetest/games/mygame/menu/theme.2.ogg
+    ```
+  </Step>
+
+  <Step title="Test in the main menu">
+    Launch Luanti, select your game, and listen for your theme. If you added multiple tracks, reopen the menu a few times to verify random selection is working.
+  </Step>
+</Steps>
+
+## Quick reference
+
+| Asset | File name | Format | Limit |
+|-------|-----------|--------|-------|
+| Background | `background.png` / `background.<n>.png` | PNG | No limit |
+| Overlay | `overlay.png` / `overlay.<n>.png` | PNG | No limit |
+| Header | `header.png` / `header.<n>.png` | PNG | No limit |
+| Footer | `footer.png` / `footer.<n>.png` | PNG | No limit |
+| Music | `theme.ogg` / `theme.<n>.ogg` | Ogg Vorbis | Max 10 numbered tracks |

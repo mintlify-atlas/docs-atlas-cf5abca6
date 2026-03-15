@@ -1,0 +1,137 @@
+---
+title: "Server Overview"
+description: "An introduction to running a dedicated Luanti server, the luantiserver binary, and how server builds differ from client builds."
+---
+
+Luanti separates its client and server functionality at build time. When you run a dedicated server, you build and run the `luantiserver` binary, which has no graphical interface and no dependency on a display, audio, or rendering stack. This makes it suitable for headless Linux servers and containerized deployments.
+
+## Client vs. Server Builds
+
+The full Luanti client (`luanti` binary) bundles both client-side rendering (via the Irrlicht/IrrlichtMt engine) and an embedded server for singleplayer and hosted sessions. The dedicated server binary (`luantiserver`) is a stripped-down build that omits all client-side subsystems.
+
+<CardGroup cols={2}>
+  <Card title="luanti (client)" icon="desktop">
+    Full GUI, rendering engine, audio system, and an embedded server for singleplayer or LAN hosting.
+  </Card>
+  <Card title="luantiserver (dedicated)" icon="server">
+    Headless server binary. No display required. Suitable for 24/7 dedicated hosting.
+  </Card>
+</CardGroup>
+
+Differences at a glance:
+
+| Feature | `luanti` | `luantiserver` |
+|---|---|---|
+| GUI / rendering | Yes | No |
+| Audio | Yes | No |
+| Irrlicht dependency | Yes | No |
+| Network server | Optional | Always |
+| `BUILD_CLIENT` CMake flag | `TRUE` | `FALSE` |
+| `BUILD_SERVER` CMake flag | Optional | `TRUE` |
+
+## Building the Dedicated Server
+
+When compiling from source, pass `-DBUILD_SERVER=TRUE` and `-DBUILD_CLIENT=FALSE` to CMake to produce only the server binary.
+
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SERVER=TRUE \
+  -DBUILD_CLIENT=FALSE \
+  -GNinja
+cmake --build build
+cmake --install build
+```
+
+Additional flags used in the official Docker image:
+
+```bash
+cmake -B build \
+  -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SERVER=TRUE \
+  -DENABLE_PROMETHEUS=TRUE \
+  -DBUILD_UNITTESTS=FALSE -DBUILD_BENCHMARKS=FALSE \
+  -DBUILD_CLIENT=FALSE \
+  -GNinja
+```
+
+<Note>
+  Setting `-DBUILD_UNITTESTS=FALSE` and `-DBUILD_BENCHMARKS=FALSE` reduces build time for production deployments.
+</Note>
+
+## Starting the Server
+
+Once built, start a server with the `--world` and `--gameid` flags:
+
+```bash
+luantiserver --world /path/to/world --gameid gameid
+```
+
+For example, to start a server running the Minetest Game on a world located at `/var/lib/luanti/worlds/myworld`:
+
+```bash
+luantiserver --world /var/lib/luanti/worlds/myworld --gameid minetest
+```
+
+You can pass a custom config file with `--config`:
+
+```bash
+luantiserver \
+  --world /var/lib/luanti/worlds/myworld \
+  --gameid minetest \
+  --config /etc/luanti/minetest.conf
+```
+
+Run `luantiserver --help` to see all available command-line options.
+
+## Server Architecture
+
+The dedicated server manages several subsystems:
+
+<Steps>
+  <Step title="World Management">
+    Loads and saves map data using a configurable database backend (SQLite3 by default, with support for LevelDB, PostgreSQL, and Redis). Map chunks (MapBlocks) are loaded on demand and unloaded after a configurable idle period.
+  </Step>
+  <Step title="Authentication">
+    Validates player credentials on join using a pluggable auth backend. The default `files` backend stores credentials in `auth.txt` inside the world directory. An SQLite3 backend (`auth.sqlite`) is also available.
+  </Step>
+  <Step title="Networking">
+    Accepts UDP connections on port 30000 by default. Optionally exposes a TCP port for media serving. IPv6 is supported and enabled by default when `bind_address` is not set.
+  </Step>
+  <Step title="Mod / Game Loading">
+    Loads the specified game and any enabled mods, then runs the Lua environment for server-side game logic via LuaJIT.
+  </Step>
+  <Step title="Player Session Management">
+    Tracks connected players, enforces privilege restrictions, applies anticheat, and handles chat.
+  </Step>
+</Steps>
+
+## Server List Integration
+
+You can make your server publicly discoverable on the [Luanti server list](https://servers.luanti.org) by setting the following in your `minetest.conf`:
+
+```ini
+server_name = My Luanti Server
+server_description = A great place to play
+server_address = game.example.net
+server_announce = true
+```
+
+The server periodically sends its metadata (name, description, player count, game ID) to the configured `serverlist_url`. By default this is `https://servers.luanti.org`.
+
+<Warning>
+  Do not set `server_announce = true` unless your server is publicly reachable on UDP port 30000. Announcing an unreachable server degrades the player experience for anyone who tries to connect.
+</Warning>
+
+## Paths
+
+The server respects the same path conventions as the client:
+
+| Location | Linux (installed) |
+|---|---|
+| Binaries (`bin`) | `/usr/bin` |
+| Read-only data (`share`) | `/usr/share/minetest` |
+| User data (`user`) | `~/.minetest` or `$MINETEST_USER_PATH` |
+
+Worlds are stored under `user/worlds/`. You can override the user path by setting the `MINETEST_USER_PATH` environment variable.

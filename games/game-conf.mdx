@@ -1,0 +1,171 @@
+---
+title: "game.conf reference"
+description: "Complete reference for all keys supported in a Luanti game's game.conf configuration file."
+---
+
+The `game.conf` file lives in the root of your game directory and controls metadata, mod load order, map generator options, and settings visibility. Only `title` is required — all other keys are optional.
+
+```ini
+# Example game.conf
+title = My Game
+description = An example voxel game built with Luanti.
+author = YourContentDBUsername
+allowed_mapgens = v7,flat,valleys
+default_mapgen = v7
+```
+
+## Keys
+
+### Identity
+
+<ParamField path="title" type="string" required>
+  A human-readable name for the game, shown in the main menu and content tab.
+
+  ```ini
+  title = Minetest Game
+  ```
+</ParamField>
+
+<ParamField path="description" type="string">
+  A short description of the game shown in the content tab. You can provide translations of this field — see the Luanti content meta translation documentation for details.
+
+  ```ini
+  description = A survival and building game set in an infinite voxel world.
+  ```
+</ParamField>
+
+<ParamField path="author" type="string">
+  The author's ContentDB username. Used by the Luanti content system to attribute the game.
+
+  ```ini
+  author = YourUsername
+  ```
+</ParamField>
+
+<ParamField path="aliases" type="string">
+  A comma-separated list of legacy game IDs that should be treated as aliases for this game. Worlds that were created with an old game ID listed here will automatically load this game instead.
+
+  Use this when you rename a game (including its directory name) so that existing worlds remain playable.
+
+  ```ini
+  aliases = oldgameid, anothername
+  ```
+</ParamField>
+
+### Mod load order
+
+By default, Luanti determines mod load order automatically based on dependencies. Use these keys to override that order for specific mods.
+
+<ParamField path="first_mod" type="string">
+  The name of the mod that must be loaded before all other mods in this game.
+
+  ```ini
+  first_mod = mybasemod
+  ```
+</ParamField>
+
+<ParamField path="last_mod" type="string">
+  The name of the mod that must be loaded after all other mods in this game.
+
+  ```ini
+  last_mod = myoverrides
+  ```
+</ParamField>
+
+### Map generators
+
+<ParamField path="allowed_mapgens" type="string">
+  A comma-separated list of map generators that are available for this game. Map generators not in this list are removed from the world-creation dialog.
+
+  If you do not specify this key, all built-in map generators are available.
+
+  When both `allowed_mapgens` and `disallowed_mapgens` are set, `allowed_mapgens` is applied first.
+
+  ```ini
+  allowed_mapgens = v5,v6,flat
+  ```
+</ParamField>
+
+<ParamField path="disallowed_mapgens" type="string">
+  A comma-separated list of map generators that are explicitly removed from the world-creation dialog for this game.
+
+  When both `allowed_mapgens` and `disallowed_mapgens` are set, `allowed_mapgens` is applied first, then `disallowed_mapgens` is applied to the result.
+
+  ```ini
+  disallowed_mapgens = v5,v6,flat
+  ```
+</ParamField>
+
+<ParamField path="default_mapgen" type="string">
+  The map generator selected by default when a player creates a new world for this game.
+
+  ```ini
+  default_mapgen = valleys
+  ```
+</ParamField>
+
+<ParamField path="disallowed_mapgen_settings" type="string">
+  A comma-separated list of mapgen setting names that are hidden in the world-creation dialog and the game start menu.
+
+  Add `seed` to this list to hide the world seed input field entirely.
+
+  ```ini
+  disallowed_mapgen_settings = mgv5_spflags
+  ```
+
+  ```ini
+  # Hide the seed field
+  disallowed_mapgen_settings = seed
+  ```
+</ParamField>
+
+### Settings visibility
+
+<ParamField path="disabled_settings" type="string">
+  A comma-separated list of game settings that are hidden from the player in the **Start game** tab. Hidden settings are initialized to `false` when the game starts.
+
+  Prefix a setting name with `!` to initialize it to `true` instead of `false`.
+
+  The supported settings are:
+
+  - `enable_damage`
+  - `creative_mode`
+  - `enable_server`
+
+  <Warning>
+    The `!` prefix (force-enable) does not work for `enable_server`.
+  </Warning>
+
+  ```ini
+  # Hide both settings; both default to false
+  disabled_settings = enable_damage, creative_mode
+  ```
+
+  ```ini
+  # Hide enable_damage but initialize it to true (damage always on)
+  disabled_settings = !enable_damage
+  ```
+</ParamField>
+
+### World persistence
+
+<ParamField path="map_persistent" type="boolean" default="true">
+  Controls whether newly created worlds for this game use a persistent map backend.
+
+  Defaults to `true`, which uses the `sqlite3` backend. Set to `false` to use a non-persistent (in-memory) map.
+
+  ```ini
+  map_persistent = true
+  ```
+</ParamField>
+
+## Deprecated keys
+
+| Key | Replacement | Notes |
+|-----|-------------|-------|
+| `name` | `title` | Use `title` instead. `name` still works but is deprecated. |
+| `release` | — | Set only by ContentDB. Do not set this manually. |
+
+<Note>
+  The `textdomain` key controls which translation domain is used for the `description` field. It defaults to the game's ID. See the Luanti content meta translation documentation for details.
+</Note>

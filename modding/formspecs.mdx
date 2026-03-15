@@ -1,0 +1,454 @@
+---
+title: "Formspecs"
+description: "Build interactive UI forms for players using Luanti's formspec system — covering syntax, common elements, and handling player input."
+---
+
+Formspecs are Luanti's built-in GUI system for displaying interactive forms to players. You use them to build chest inventories, crafting interfaces, configuration dialogs, sign text input, and any other in-game UI that requires player interaction.
+
+When you call `core.show_formspec`, the server sends a formspec string to the client, which renders it as an overlay on the player's screen. The client then sends field data back to the server whenever the player interacts with the form.
+
+## Formspec syntax
+
+A formspec is a single string containing a series of **elements** separated by newlines or spaces. Each element uses the syntax:
+
+```
+elementname[param1;param2;...]
+```
+
+Parameters are separated by semicolons. Coordinates and sizes are specified in **inventory slots** (approximately 64×64 pixels at default scale) when using the legacy coordinate system, or in real pixel-relative units when `formspec_version[2]` or higher is used.
+
+<Note>
+Always start new formspecs with `formspec_version[6]` or higher to use the modern coordinate system. Real coordinates give you consistent sizing regardless of screen resolution.
+</Note>
+
+### Minimal formspec structure
+
+```lua
+local formspec =
+    "formspec_version[6]" ..
+    "size[8,5]" ..
+    "label[0.5,0.5;Hello, world!]" ..
+    "button_exit[3,4;2,0.8;close;Close]"
+```
+
+The order of **preamble elements** matters:
+
+1. `formspec_version[]` — must come first
+2. `size[]` — defines form dimensions
+3. `position[]` — optional, where on screen to place the form
+4. `anchor[]` — optional, which edge of the form anchors to `position`
+5. `padding[]` — optional, shrink-to-fit margin
+6. `no_prepend[]` — optional, disable global prepends
+
+## Displaying a formspec
+
+```lua
+core.show_formspec(playername, formname, formspec)
+```
+
+<ParamField path="playername" type="string" required>
+  The name of the player to show the form to.
+</ParamField>
+
+<ParamField path="formname" type="string" required>
+  A unique name for this form, used to identify it in `on_receive_fields`. Follow the `"modname:formname"` naming convention. Pass an empty string `""` to show a temporary inventory form.
+</ParamField>
+
+<ParamField path="formspec" type="string" required>
+  The formspec string to render.
+</ParamField>
+
+To programmatically close a form:
+
+```lua
+core.close_formspec(playername, formname)
+```
+
+Passing an empty `formname` closes any open formspec for the player — use this only when absolutely necessary.
+
+## Handling player input
+
+Register a callback to receive field data when the player interacts with a form:
+
+```lua
+core.register_on_player_receive_fields(function(player, formname, fields)
+    if formname ~= "mymod:myform" then return end
+
+    if fields.quit then
+        -- Player closed the form
+        return true
+    end
+
+    if fields.submit then
+        -- Button named "submit" was clicked
+        local name = player:get_player_name()
+        local entered_text = fields.text_input or ""
+        core.chat_send_player(name, "You entered: " .. entered_text)
+        return true
+    end
+end)
+```
+
+<Note>
+Newest-registered callbacks run first. Return `true` to stop further callbacks from processing this event.
+</Note>
+
+The `fields` table is triggered on any of:
+- A button being clicked
+- Enter pressed in a text field
+- A checkbox toggled
+- A dropdown selection changed
+- A different tab selected
+- A textlist or table selection changed
+- The form closed by the player (`fields.quit == "true"`)
+- The player tried to close a form with `allow_close[false]` set (`fields.try_quit == "true"`)
+
+## Preamble elements
+
+### `formspec_version[<version>]`
+
+Sets the formspec version. Must come before `size[]`. Clients older than this version cannot display the form correctly.
+
+Current versions:
+
+| Version | Luanti version | Notable additions |
+|---------|---------------|-------------------|
+| 1 | pre-5.1.0 | baseline |
+| 2 | 5.1.0 | real coordinates, `background9[]` |
+| 3 | 5.2.0 | draw order, `scroll_container[]` |
+| 6 | 5.6.0 | nine-slice images, `animated_image[]` |
+| 9 | 5.12.0 | `allow_close[]`, area labels |
+
+### `size[<W>,<H>]`
+
+Defines the form size in coordinate units. Required for any form with positioned elements.
+
+```
+size[8,9]
+```
+
+### `position[<X>,<Y>]`
+
+Specifies where the form's anchor point appears on screen. `0,0` is the top-left corner, `1,1` is the bottom-right, and `0.5,0.5` (the default) is the center.
+
+### `anchor[<X>,<Y>]`
+
+Specifies which point of the form is placed at `position`. `0.5,0.5` (default) centers the form on the position.
+
+### `allow_close[<bool>]`
+
+When set to `false`, the player cannot close the form with Escape or similar. `*_exit[]` elements and `core.close_formspec()` still work. Available since formspec version 9.
+
+```
+allow_close[false]
+```
+
+## Common elements
+
+### `label[<X>,<Y>;<text>]`
+
+Displays text at the given position. Does not wrap automatically — use `\n` for newlines.
+
+```
+label[0.5,0.5;Welcome to the shop!]
+```
+
+With formspec version 9+, you can use an area variant that wraps text:
+
+```
+label[0.5,0.5;6,2;This is a longer text that will be\nautomatically wrapped.]
+```
+
+### `button[<X>,<Y>;<W>,<H>;<name>;<label>]`
+
+A clickable button. When clicked, all field values are sent to the server. The button's `name` appears in the `fields` table.
+
+```
+button[1,3;3,0.8;confirm;Confirm Purchase]
+```
+
+### `button_exit[<X>,<Y>;<W>,<H>;<name>;<label>]`
+
+Same as `button[]` but also closes the form when clicked.
+
+```
+button_exit[1,3;3,0.8;cancel;Cancel]
+```
+
+### `field[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
+
+A single-line text input field. The entered text is sent in `fields.<name>`. The `label` appears above the field; `default` pre-fills the value.
+
+```
+field[1,1;6,0.8;player_name;Player name:;]
+```
+
+`default` can reference node metadata variables:
+
+```
+field[1,1;6,0.8;sign_text;Text:;${text}]
+```
+
+### `pwdfield[<X>,<Y>;<W>,<H>;<name>;<label>]`
+
+Like `field[]` but masks the input — useful for passwords or other sensitive data.
+
+```
+pwdfield[1,1;6,0.8;secret;Enter password:]
+```
+
+### `textarea[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
+
+A multi-line text input. Text wraps within the bounds; a vertical scrollbar appears if the content overflows. Pass an empty `name` to make it read-only.
+
+```
+textarea[1,1;6,3;description;Description:;Enter item description here.]
+```
+
+### `image[<X>,<Y>;<W>,<H>;<texture name>]`
+
+Displays a texture image at the given position and size.
+
+```
+image[0,0;2,2;mymod_logo.png]
+```
+
+### `item_image[<X>,<Y>;<W>,<H>;<item name>]`
+
+Renders an item's inventory image.
+
+```
+item_image[0,0;1,1;default:diamond]
+```
+
+### `list[<inventory location>;<list name>;<X>,<Y>;<W>,<H>;<start index>]`
+
+Shows an inventory grid. Inventory locations are:
+
+- `current_player` — the player viewing the form
+- `context` — the node or entity that triggered the form
+- `nodemeta:<X>,<Y>,<Z>` — a specific node's metadata inventory
+- `detached:<name>` — a detached (virtual) inventory
+
+```
+list[current_player;main;0,5;8,4;]
+list[context;main;0,0;8,4;]
+```
+
+### `listring[<inventory location>;<list name>]`
+
+Links two inventory lists so shift-clicking moves items between them.
+
+```
+list[context;main;0,0;8,4;]
+list[current_player;main;0,5;8,4;]
+listring[context;main]
+listring[current_player;main]
+```
+
+### `checkbox[<X>,<Y>;<name>;<label>;<selected>]`
+
+A checkbox. The `fields` value is `"true"` or `"false"`.
+
+```
+checkbox[0.5,2;enable_feature;Enable feature;true]
+```
+
+### `dropdown[<X>,<Y>;<W>,<H>;<name>;<item1>,<item2>,...;<selected idx>;<index event>]`
+
+A dropdown selector. When `index event` is `true`, the `fields` value is the selected index; otherwise it's the item text.
+
+```
+dropdown[1,2;4,0.8;difficulty;Easy,Normal,Hard;2;false]
+```
+
+### `tabheader[<X>,<Y>;<W>,<H>;<name>;<tab1>,<tab2>,...;<current>;<transparent>;<draw_border>]`
+
+Shows a row of tabs. `fields.<name>` is the selected tab index as a string starting from `"1"`.
+
+```
+tabheader[0,0;8,0.8;tabs;Items,Crafting,Settings;1;false;true]
+```
+
+### `textlist[<X>,<Y>;<W>,<H>;<name>;<elem1>,<elem2>,...;<selected idx>;<transparent>]`
+
+A scrollable list. Double-clicking an element triggers a `fields` event. Use `core.explode_textlist_event` to parse the value.
+
+```
+textlist[0,1;8,3;players;Alice,Bob,Charlie;1;false]
+```
+
+### `scrollbar[<X>,<Y>;<W>,<H>;<orientation>;<name>;<value>]`
+
+A scrollbar with value range 0–1000 (configurable via `scrollbaroptions[]`). Use `core.explode_scrollbar_event` to parse the value.
+
+```
+scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]
+scrollbar[7,1;0.5,3;vertical;mybar;500]
+```
+
+### `tooltip[<element name>;<text>]`
+
+Attaches a tooltip to a named element.
+
+```
+tooltip[confirm;Click to confirm your purchase]
+```
+
+### `box[<X>,<Y>;<W>,<H>;<color>]`
+
+Draws a colored rectangle. Colors are `ColorString` values (e.g. `#FF0000` for red, `#FF000080` for semi-transparent red).
+
+```
+box[0,0;8,0.6;#00000040]
+```
+
+### `bgcolor[<bgcolor>;<fullscreen>;<fbgcolor>]`
+
+Sets the form background color. `fullscreen` can be `"true"`, `"false"`, or `"neither"`. `fbgcolor` tints the screen behind the form.
+
+```
+bgcolor[#0000007F;true]
+```
+
+### `container[<X>,<Y>]` / `container_end[]`
+
+Shifts all child elements by the given offset. Containers can be nested.
+
+```
+container[2,1]
+label[0,0;This label is at 2,1 in the form]
+button[0,0.5;3,0.8;ok;OK]
+container_end[]
+```
+
+## Escaping special characters
+
+Formspec strings use `[`, `]`, `\`, `,`, and `;` as special characters. Escape them with `core.formspec_escape`:
+
+```lua
+local safe_text = core.formspec_escape(player_input)
+local fs = "label[0.5,0.5;" .. safe_text .. "]"
+```
+
+## Complete example: settings dialog
+
+This example shows a settings dialog that lets the player set a display name and choose a difficulty.
+
+```lua
+local FORMNAME = "mymod:settings"
+
+local function get_formspec(player)
+    local meta = player:get_meta()
+    local display_name = core.formspec_escape(
+        meta:get_string("display_name")
+    )
+    return table.concat({
+        "formspec_version[6]",
+        "size[7,5]",
+        "label[0.5,0.5;Player Settings]",
+        "field[0.5,1.5;6,0.8;display_name;Display name:;" .. display_name .. "]",
+        "dropdown[0.5,3;6,0.8;difficulty;Easy,Normal,Hard;2;false]",
+        "button_exit[0.5,4;2.5,0.8;cancel;Cancel]",
+        "button_exit[4,4;2.5,0.8;save;Save]",
+    })
+end
+
+core.register_on_joinplayer(function(player)
+    -- Show settings on join (example)
+    -- core.show_formspec(player:get_player_name(), FORMNAME, get_formspec(player))
+end)
+
+core.register_chatcommand("settings", {
+    description = "Open settings dialog",
+    func = function(name)
+        local player = core.get_player_by_name(name)
+        if not player then return false, "Player not found" end
+        core.show_formspec(name, FORMNAME, get_formspec(player))
+        return true
+    end,
+})
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+    if formname ~= FORMNAME then return end
+
+    if fields.save then
+        local meta = player:get_meta()
+        meta:set_string("display_name", fields.display_name or "")
+        local name = player:get_player_name()
+        core.chat_send_player(name,
+            "Settings saved! Difficulty: " .. (fields.difficulty or "Normal"))
+        return true
+    end
+end)
+```
+
+## Node metadata formspecs
+
+For nodes with an associated inventory or interface, define the formspec in the node definition:
+
+```lua
+core.register_node("mymod:chest", {
+    description = "Chest",
+    tiles = {"mymod_chest_top.png", "mymod_chest_side.png"},
+    on_construct = function(pos)
+        local meta = core.get_meta(pos)
+        meta:set_string("infotext", "Chest")
+        meta:get_inventory():set_size("main", 8 * 4)
+        meta:set_string("formspec",
+            "formspec_version[6]" ..
+            "size[8,9]" ..
+            "list[context;main;0,0;8,4;]" ..
+            "list[current_player;main;0,5;8,4;]" ..
+            "listring[context;main]" ..
+            "listring[current_player;main]"
+        )
+    end,
+    on_receive_fields = function(pos, formname, fields, sender)
+        -- Handle field events for this node's form
+    end,
+})
+```
+
+Node metadata formspecs trigger `on_receive_fields` in the node definition, **not** `core.register_on_player_receive_fields`.
+
+## Built-in examples
+
+<Tabs>
+  <Tab title="Chest">
+    ```
+    size[8,9]
+    list[context;main;0,0;8,4;]
+    list[current_player;main;0,5;8,4;]
+    ```
+  </Tab>
+  <Tab title="Furnace">
+    ```
+    size[8,9]
+    list[context;fuel;2,3;1,1;]
+    list[context;src;2,1;1,1;]
+    list[context;dst;5,1;2,2;]
+    list[current_player;main;0,5;8,4;]
+    ```
+  </Tab>
+  <Tab title="Player inventory">
+    ```
+    size[8,7.5]
+    image[1,0.6;1,2;player.png]
+    list[current_player;main;0,3.5;8,4;]
+    list[current_player;craft;3,0;3,3;]
+    list[current_player;craftpreview;7,1;1,1;]
+    ```
+  </Tab>
+</Tabs>
+
+## Styling formspecs
+
+Use `style[]` to apply visual styles to specific named elements, or `style_type[]` to style all elements of a given type:
+
+```
+style_type[button;bgcolor=#4a90d9;bgcolor_hovered=#357abd]
+style[save;bgcolor=#2ecc71;bgcolor_hovered=#27ae60]
+```
+
+See the [Styling Formspecs](https://github.com/luanti-org/luanti/blob/master/doc/lua_api.md#styling-formspecs) section in the Lua API reference for the full list of supported properties.

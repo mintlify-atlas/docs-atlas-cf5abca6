@@ -1,0 +1,138 @@
+---
+title: "Lua API Overview"
+description: "Introduction to the Luanti server-side Lua modding API, the core namespace, API versioning, and key functional areas."
+---
+
+Luanti mods are Lua scripts that the server loads at startup. They can register new content, respond to events, manipulate the map, and interact with players. Everything is exposed through the `core` global namespace.
+
+## The `core` namespace
+
+All API functions live under `core`. The legacy alias `minetest` still works for backwards compatibility, but new code should always use `core`.
+
+```lua
+-- Both of these are identical
+core.log("action", "Hello from a mod")
+minetest.log("action", "Hello from a mod")  -- deprecated alias
+```
+
+<Note>
+`core` has existed since version 0.4.10, so using it does not break backwards compatibility with any reasonably modern Luanti version.
+</Note>
+
+## API versioning
+
+Luanti does not expose a single integer API version. Instead, it exposes a `core.features` table that lists specific capabilities as boolean flags. Each flag corresponds to the version that introduced the feature.
+
+```lua
+-- Check a specific feature before using it
+if core.features.bulk_lbms then
+    -- Use bulk LBM support (5.10.0+)
+end
+```
+
+To check multiple features at once, use `core.has_feature`:
+
+```lua
+core.has_feature(arg)
+-- arg: a string or table like {foo=true, bar=true}
+-- Returns: boolean, missing_features_table
+
+local ok, missing = core.has_feature({bulk_lbms = true, object_guids = true})
+if not ok then
+    core.log("warning", "Missing features: " .. dump(missing))
+end
+```
+
+To retrieve the engine version string (for informational display only — not for capability checks):
+
+```lua
+local v = core.get_version()
+-- v.project  → "Luanti"
+-- v.string   → "5.10.0"
+-- v.is_dev   → false
+```
+
+<Warning>
+Do not use `core.get_version()` to gate feature usage. Use `core.features` or test for function existence instead: `if core.some_function then ... end`.
+</Warning>
+
+## Mod loading
+
+Mods run during server startup. The entry point is each mod's `init.lua`. At load time you register everything — nodes, entities, callbacks, crafting recipes — and then the engine calls your registered functions as events occur.
+
+```lua
+-- init.lua
+local modname = core.get_current_modname()  -- "mymod"
+local modpath = core.get_modpath(modname)   -- "/path/to/mymod"
+
+core.log("action", modname .. " loading from " .. modpath)
+```
+
+## Key API areas
+
+<AccordionGroup>
+  <Accordion title="Node registration and manipulation">
+    Register new node types with `core.register_node`, then read and write nodes in the world with functions like `core.get_node`, `core.set_node`, and `core.find_node_near`. See [Node API](/api/nodes).
+  </Accordion>
+
+  <Accordion title="Items and crafting">
+    Register craftitems and tools with `core.register_craftitem` / `core.register_tool`. Query craft recipes and item definitions at runtime. Manipulate `ItemStack` objects. See [Item API](/api/items).
+  </Accordion>
+
+  <Accordion title="Players">
+    Retrieve connected players with `core.get_connected_players` or `core.get_player_by_name`. Use `PlayerRef` methods to read and set position, health, inventory, HUD, and physics overrides. See [Player API](/api/players).
+  </Accordion>
+
+  <Accordion title="Entities">
+    Spawn Lua entities with `core.add_entity`. Query nearby objects with `core.get_objects_inside_radius`. Define entity behaviour through callbacks like `on_activate`, `on_step`, and `on_punch`. See [Entity API](/api/entities).
+  </Accordion>
+
+  <Accordion title="Map generation">
+    Register biomes, ores, and decorations. Use the VoxelManip API for high-performance map editing. Hook into chunk generation with `core.register_on_generated`. See [Mapgen API](/api/mapgen-api).
+  </Accordion>
+
+  <Accordion title="Settings">
+    Read and write configuration values via `core.settings`, a `Settings` instance backed by `minetest.conf`. See [Settings API](/api/settings).
+  </Accordion>
+
+  <Accordion title="Callbacks and events">
+    Register global event handlers for player joins, deaths, chat messages, globalsteps, and more via the `core.register_on_*` family of functions. See [Callbacks](/api/callbacks).
+  </Accordion>
+</AccordionGroup>
+
+## Registration vs. runtime
+
+Registration functions (`core.register_node`, `core.register_craft`, `core.register_on_*`, etc.) must only be called at **load time** — that is, from the top level of `init.lua` or files it `dofile`s synchronously. Calling them from inside a callback or `core.after` timer is not supported.
+
+```lua
+-- Correct: called at load time
+core.register_node("mymod:stone", { ... })
+
+-- Wrong: called inside a callback
+core.register_on_joinplayer(function(player)
+    core.register_node("mymod:stone", { ... })  -- do NOT do this
+end)
+```
+
+## Global tables
+
+All registered content is also accessible through global lookup tables:
+
+| Table | Contents |
+|---|---|
+| `core.registered_nodes` | All registered node definitions, indexed by name |
+| `core.registered_items` | All registered item definitions, indexed by name |
+| `core.registered_tools` | Tool definitions |
+| `core.registered_craftitems` | Craftitem definitions |
+| `core.registered_entities` | Entity prototypes |
+| `core.registered_biomes` | Biome definitions |
+| `core.registered_ores` | Ore definitions |
+| `core.registered_decorations` | Decoration definitions |
+
+```lua
+-- Check if a node exists before using it
+local def = core.registered_nodes["default:stone"]
+if def then
+    print(def.drawtype)
+end
+```

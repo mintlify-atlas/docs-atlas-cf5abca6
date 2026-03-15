@@ -1,0 +1,396 @@
+---
+title: "HUD Elements"
+description: "Add and manage Heads-Up Display elements for players — covering all HUD types, player methods, HUD flags, and practical examples."
+---
+
+The Heads-Up Display (HUD) lets you overlay persistent on-screen elements for individual players: images, text labels, health bars, waypoints, minimaps, and more. Unlike formspecs, HUD elements do not receive player interaction — they are purely visual.
+
+Each HUD element is associated with a specific player and identified by a numeric ID returned from `hud_add`. You use that ID to update or remove the element later.
+
+## HUD coordinate system
+
+HUD positions are expressed as fractions of the screen, where `{x=0, y=0}` is the top-left corner and `{x=1, y=1}` is the bottom-right. For example, `{x=0.5, y=0.5}` centers an element on screen.
+
+**Offsets** are in pixels (scaled by screen DPI and user scaling) and allow fine-tuning position relative to the fractional `position`.
+
+**Z-index** controls the stacking order. Recommended values:
+
+| z_index | Purpose |
+|---------|---------|
+| -400 | Graphical effects (vignette) |
+| -300 | Name tags, waypoints |
+| -200 | Wield hand |
+| 0 | Default (crosshair, hotbar, minimap, statbars) |
+| 100 | Notifications, temporary messages |
+| 1000 | Full-screen overlays, credits |
+
+## Player HUD methods
+
+All HUD methods are called on a `PlayerObjectRef`, obtained via `core.get_player_by_name(name)` or from a player callback.
+
+### `player:hud_add(def)`
+
+Adds a HUD element and returns its numeric ID on success.
+
+```lua
+local id = player:hud_add({
+    type     = "text",
+    position = {x = 0.5, y = 0.1},
+    offset   = {x = 0,   y = 0},
+    text     = "Hello!",
+    number   = 0xFFFFFF,
+    scale    = {x = 100, y = 100},
+    alignment = {x = 0, y = 0},
+})
+```
+
+### `player:hud_remove(id)`
+
+Removes the HUD element with the given ID.
+
+```lua
+player:hud_remove(id)
+```
+
+### `player:hud_change(id, stat, value)`
+
+Updates a single field of an existing HUD element. `stat` is any key from the original HUD definition except `type`.
+
+```lua
+player:hud_change(id, "text", "Updated text")
+player:hud_change(id, "number", 0xFF0000)  -- change color to red
+```
+
+### `player:hud_get(id)`
+
+Returns the current HUD definition table for the given ID.
+
+```lua
+local def = player:hud_get(id)
+core.log("Current text: " .. def.text)
+```
+
+### `player:hud_get_all()`
+
+Returns a table in the form `{ [id] = hud_definition, ... }` for all HUD elements belonging to the player.
+
+## HUD element types
+
+### `image`
+
+Displays a texture on the HUD.
+
+```lua
+local img_id = player:hud_add({
+    type      = "image",
+    position  = {x = 0.1, y = 0.1},
+    offset    = {x = 0, y = 0},
+    scale     = {x = 2, y = 2},       -- 2x original texture size
+    text      = "mymod_icon.png",     -- texture name
+    alignment = {x = -1, y = -1},     -- anchor top-left
+    z_index   = 100,
+})
+```
+
+`scale` fields:
+- Positive values multiply the source texture dimensions.
+- Negative values are percentages of screen dimensions. `{x=-20, y=3}` means 20% of screen width wide, 3× texture height tall.
+
+### `text`
+
+Displays a text string.
+
+```lua
+local txt_id = player:hud_add({
+    type      = "text",
+    position  = {x = 0.5, y = 0.05},
+    offset    = {x = 0, y = 0},
+    text      = "Score: 0",
+    number    = 0xFFFFFF,    -- ARGB color; 0xFFFFFF = white
+    scale     = {x = 150, y = 30},
+    alignment = {x = 0, y = 0},
+    size      = {x = 1},     -- multiplied by player font size
+    style     = 1,           -- 1=bold, 2=italic, 4=monospace (bitfield)
+})
+```
+
+<Note>
+Alpha in `number` only works on Luanti 5.15+ clients. To hide a text element, set `text` to `""` rather than making alpha `0x00`.
+</Note>
+
+The `text` field supports `core.translate` (always) and `core.colorize` (protocol version 44+).
+
+### `statbar`
+
+A horizontal bar composed of half-images — typically used for health and breath bars.
+
+```lua
+local bar_id = player:hud_add({
+    type      = "statbar",
+    position  = {x = 0.5, y = 1},
+    offset    = {x = -192, y = -48},
+    text      = "heart.png",          -- foreground texture
+    text2     = "heart_bg.png",       -- background / empty texture (optional)
+    number    = 20,                   -- filled half-images (10 hearts = 20)
+    item      = 20,                   -- total half-images for background
+    direction = 0,                    -- 0=left-to-right
+    size      = {x = 24, y = 24},     -- override texture size in pixels
+})
+```
+
+`number` is displayed as half-images: a value of 1 shows half a heart, 2 shows a full heart, and so on. An odd number ends with a vertically center-split image.
+
+### `inventory`
+
+Renders a portion of an inventory list.
+
+```lua
+local inv_id = player:hud_add({
+    type      = "inventory",
+    position  = {x = 0.5, y = 1},
+    offset    = {x = -240, y = -44},
+    text      = "main",     -- inventory list name
+    number    = 8,          -- number of slots to show
+    item      = 1,          -- selected slot index
+    direction = 0,
+    alignment = {x = -1, y = -1},
+})
+```
+
+### `hotbar`
+
+Controls the position of the built-in hotbar.
+
+```lua
+local hb_id = player:hud_add({
+    type      = "hotbar",
+    position  = {x = 0.5, y = 1},
+    offset    = {x = 0, y = -44},
+    direction = 0,
+    alignment = {x = 0, y = -1},
+})
+```
+
+### `waypoint`
+
+Displays the distance to a world position, useful for marking locations.
+
+```lua
+local wp_id = player:hud_add({
+    type      = "waypoint",
+    name      = "Treasure Chest",
+    world_pos = {x = 100, y = 64, z = -50},
+    text      = "m",        -- distance unit suffix
+    number    = 0x00FF00,   -- color (green)
+    precision = 10,         -- show 1 decimal place (floor(dist*10)/10)
+})
+```
+
+`precision` controls how the distance value is formatted:
+- `0`: distance not shown
+- `1`: integer meters
+- `10`: 1 decimal place
+- `1000`: 3 decimal places
+
+### `image_waypoint`
+
+Like `image`, but the position is determined by `world_pos` instead of a screen-space `position` field.
+
+```lua
+local iwp_id = player:hud_add({
+    type      = "image_waypoint",
+    world_pos = {x = 0, y = 100, z = 0},
+    text      = "mymod_marker.png",
+    scale     = {x = 1, y = 1},
+    alignment = {x = 0, y = -1},
+})
+```
+
+### `compass`
+
+Displays an image that rotates or translates based on the player's heading.
+
+```lua
+local compass_id = player:hud_add({
+    type      = "compass",
+    position  = {x = 0.5, y = 0.05},
+    size      = {x = 512, y = 32},
+    text      = "mymod_compass_strip.png",
+    direction = 2,   -- 2=translate as landscape, 0=rotate as heading
+    alignment = {x = 0, y = 0},
+})
+```
+
+`direction` values:
+- `0`: Rotate as heading direction
+- `1`: Rotate in reverse direction
+- `2`: Translate as landscape direction (texture scrolls)
+- `3`: Translate in reverse direction
+
+### `minimap`
+
+Displays a minimap panel.
+
+```lua
+local mm_id = player:hud_add({
+    type      = "minimap",
+    position  = {x = 1, y = 0},
+    offset    = {x = -10, y = 10},
+    size      = {x = 256, y = 256},
+    alignment = {x = 1, y = -1},
+})
+```
+
+Negative `size` values represent percentages of the screen. On a 1920×1080 screen, `{x=0, y=-25}` produces a 270×270 minimap. Requires protocol version 44+.
+
+## HUD flags
+
+HUD flags control which built-in HUD elements are visible for a player. Use `hud_set_flags` to enable or disable them:
+
+```lua
+player:hud_set_flags({
+    hotbar          = true,
+    healthbar       = true,
+    crosshair       = true,
+    wielditem       = true,
+    breathbar       = true,
+    minimap         = true,    -- permission to view minimap
+    minimap_radar   = true,    -- radar mode (requires minimap=true)
+    basic_debug     = false,   -- seed, position, look direction, etc.
+    chat            = true,    -- permission to view chat on HUD
+})
+```
+
+`nil` values leave the corresponding flag unchanged. Read current flags with `hud_get_flags()`:
+
+```lua
+local flags = player:hud_get_flags()
+if not flags.minimap then
+    core.chat_send_player(name, "Minimap is disabled.")
+end
+```
+
+<Note>
+`minimap` and `chat` are _permissions_ — the client may still choose locally not to display them.
+`basic_debug` does not affect players with the `debug` privilege.
+</Note>
+
+## Hotbar customization
+
+Beyond HUD flags, you can customize the built-in hotbar:
+
+```lua
+-- Number of visible slots (1–32)
+player:hud_set_hotbar_itemcount(9)
+
+-- Background image for all hotbar slots
+player:hud_set_hotbar_image("mymod_hotbar_bg.png")
+
+-- Highlight image for the selected slot
+player:hud_set_hotbar_selected_image("mymod_hotbar_selected.png")
+```
+
+## Minimap modes
+
+Override the available minimap modes and the current selection:
+
+```lua
+player:set_minimap_modes({
+    { type = "off" },
+    { type = "surface", label = "Surface", size = 256 },
+    { type = "radar",   label = "Radar",   size = 512 },
+    { type = "texture",
+      label   = "Custom",
+      texture = "mymod_minimap.png",
+      scale   = 4,         -- nodes per pixel
+    },
+}, 1)  -- selected_mode index (0-based)
+```
+
+## Complete examples
+
+<Accordion title="Score display">
+This example shows a persistent score counter in the top-center of the screen.
+
+```lua
+local score_huds = {}
+
+core.register_on_joinplayer(function(player)
+    local name = player:get_player_name()
+    local id = player:hud_add({
+        type      = "text",
+        position  = {x = 0.5, y = 0.05},
+        offset    = {x = 0, y = 0},
+        text      = "Score: 0",
+        number    = 0xFFFFFF,
+        scale     = {x = 200, y = 50},
+        alignment = {x = 0, y = 0},
+        z_index   = 100,
+    })
+    score_huds[name] = id
+end)
+
+core.register_on_leaveplayer(function(player)
+    local name = player:get_player_name()
+    score_huds[name] = nil
+end)
+
+local function update_score(player, score)
+    local name = player:get_player_name()
+    local id = score_huds[name]
+    if id then
+        player:hud_change(id, "text", "Score: " .. score)
+    end
+end
+```
+</Accordion>
+
+<Accordion title="Waypoint on death location">
+```lua
+local death_waypoints = {}
+
+core.register_on_dieplayer(function(player, reason)
+    local name = player:get_player_name()
+    local pos  = player:get_pos()
+
+    -- Remove previous death marker if any
+    if death_waypoints[name] then
+        player:hud_remove(death_waypoints[name])
+    end
+
+    death_waypoints[name] = player:hud_add({
+        type      = "waypoint",
+        name      = "Death point",
+        world_pos = pos,
+        text      = "m",
+        number    = 0xFF4444,
+        precision = 1,
+    })
+end)
+
+core.register_on_respawnplayer(function(player)
+    -- Waypoint persists so the player can find their items
+end)
+
+core.register_on_leaveplayer(function(player)
+    death_waypoints[player:get_player_name()] = nil
+end)
+```
+</Accordion>
+
+<Accordion title="Compass rose">
+```lua
+core.register_on_joinplayer(function(player)
+    player:hud_add({
+        type      = "compass",
+        position  = {x = 0.5, y = 0.02},
+        offset    = {x = 0, y = 0},
+        size      = {x = 256, y = 24},
+        text      = "mymod_compass_strip.png",
+        direction = 2,
+        alignment = {x = 0, y = -1},
+        z_index   = 50,
+    })
+end)
+```
+</Accordion>

@@ -1,0 +1,128 @@
+---
+title: "Modding Overview"
+description: "An introduction to Luanti modding: what mods are, how they load, the mod system architecture, and the core API namespace."
+---
+
+Luanti is a free open-source voxel game engine with easy modding and game creation. You extend and customize Luanti by writing **mods** — self-contained bundles of Lua scripts, textures, sounds, and other assets that the engine loads at runtime.
+
+## What mods are
+
+A mod is a self-contained set of scripts, textures, and other related things that is loaded by and interfaces with Luanti. Mods run entirely on the server side. Definitions and media files are automatically transferred to the client, so players don't need to install anything manually.
+
+<Note>
+Mods run on the server. The engine transfers media (textures, sounds, models) to clients automatically when they connect.
+</Note>
+
+You can use mods to:
+
+<CardGroup cols={2}>
+  <Card title="Add new nodes" icon="cube">
+    Register custom blocks, liquids, and decorative nodes with their own textures, behaviors, and properties.
+  </Card>
+  <Card title="Add items and tools" icon="wrench">
+    Create craftable items, weapons, tools, and armor with custom functionality.
+  </Card>
+  <Card title="Implement game logic" icon="code">
+    Write server-side game logic using callbacks, timers, and event handlers.
+  </Card>
+  <Card title="Create entities" icon="person-running">
+    Register moving objects such as mobs, projectiles, and vehicles.
+  </Card>
+</CardGroup>
+
+## How mods load
+
+Mods are loaded during server startup. The engine discovers mods from the mod load paths, then runs each mod's `init.lua` script in a shared Lua environment.
+
+<Steps>
+  <Step title="Discover mods">
+    Luanti scans the mod load paths in this order:
+    - `games/<gameid>/mods/` — mods bundled with a game
+    - `mods/` — globally installed mods
+    - `worlds/<worldname>/worldmods/` — world-specific mods
+  </Step>
+  <Step title="Resolve dependencies">
+    The engine reads each mod's `mod.conf` to determine load order. Mods listed in `depends` are loaded first. If a required dependency is missing, the mod fails to load.
+  </Step>
+  <Step title="Run init.lua">
+    Each mod's `init.lua` executes in a shared environment. Running `init.lua` should register everything the mod wants to register — nodes, items, entities, callbacks, and so on.
+  </Step>
+  <Step title="Wait for callbacks">
+    After all mods load, the engine drives execution by calling the callbacks your mod registered. No mod code runs continuously; everything is event-driven.
+  </Step>
+</Steps>
+
+## Mod system architecture
+
+Luanti separates content into two levels:
+
+| Level | Description |
+|---|---|
+| **Game** | A curated collection of mods that defines the full gameplay experience. Games live in `games/<gameid>/`. |
+| **Mod** | An individual extension that registers nodes, items, entities, or other content. |
+
+A game provides its own mods inside its `mods/` directory. Players and server operators can install additional mods on top of any game. World-specific mods in `worldmods/` are only active for that particular world.
+
+### World-specific games
+
+You can embed an entire game inside a world directory. When `<worldname>/game/` exists, no mods or games are loaded from anywhere else. This is useful for self-contained adventure worlds. Place mods in `<worldname>/game/mods/`.
+
+## The `core` namespace
+
+All Luanti Lua API functions live on the global `core` table.
+
+```lua
+-- Register a simple node
+core.register_node("mymod:stone", {
+    description = "My Stone",
+    tiles = {"mymod_stone.png"},
+    groups = {cracky = 3},
+})
+
+-- Get the path to your mod's directory
+local mod_path = core.get_modpath("mymod")
+
+-- Log a message to the server console
+core.log("action", "mymod loaded successfully")
+```
+
+<Note>
+**Namespace rename:** The namespace was previously called `minetest` (e.g. `minetest.register_node`). It was renamed to `core` when the engine was renamed from Minetest to Luanti. The `minetest` alias still works and will not be removed, so existing code continues to function. `core` has been available since version 0.4.10.
+</Note>
+
+### Shared environment
+
+All mods share a single Lua environment. This means:
+
+- Global variables defined in one mod are visible to all mods loaded after it.
+- The load order matters — use `depends` in `mod.conf` to ensure your dependencies load first.
+- Prefer local variables and keep your globals prefixed with your mod name to avoid conflicts.
+
+```lua
+-- Bad: pollutes the global environment
+my_table = {}
+
+-- Good: local to this file
+local my_table = {}
+
+-- Good: namespaced global, accessible to other mods
+mymod = {}
+mymod.my_table = {}
+```
+
+## Paths
+
+Luanti uses two root paths for files:
+
+- **`path_share`** — read-only content shipped with the engine, including bundled games and mods.
+- **`path_user`** — user-installed mods, games, worlds, and configuration.
+
+On a local build (`RUN_IN_PLACE=1`), both paths point to the build directory. On a Linux system-wide install, `path_share` is typically `/usr/share/minetest` and `path_user` is `~/.minetest`.
+
+From within a mod, call `core.get_modpath(modname)` to get the absolute path to any mod's directory.
+
+## Further resources
+
+- [Lua API reference](https://docs.luanti.org/)
+- [Luanti Modding Book by rubenwardy](https://rubenwardy.com/minetest_modding_book/)
+- [Modding tools](https://github.com/luanti-org/modtools)

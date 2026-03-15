@@ -1,0 +1,139 @@
+---
+title: "Compiling on macOS"
+description: "Build Luanti from source on macOS using Homebrew, for personal use or distribution with an Xcode project."
+---
+
+## Requirements
+
+- [Homebrew](https://brew.sh/)
+- [Git](https://git-scm.com/downloads)
+
+## Install dependencies
+
+```bash
+brew install cmake freetype gettext gmp hiredis jpeg-turbo jsoncpp leveldb \
+  libogg libpng libvorbis luajit zstd gettext sdl2 openal-soft
+```
+
+## Download the source
+
+```bash
+git clone --depth 1 https://github.com/luanti-org/luanti luanti
+cd luanti
+```
+
+## Build for personal use
+
+<Steps>
+  <Step title="Configure with CMake">
+    ```bash
+    mkdir build
+    cd build
+
+    cmake .. \
+        -DCMAKE_FIND_FRAMEWORK=LAST \
+        -DCMAKE_INSTALL_PREFIX=../build/macos/ \
+        -DRUN_IN_PLACE=FALSE \
+        -DENABLE_GETTEXT=TRUE
+    ```
+  </Step>
+  <Step title="Compile">
+    ```bash
+    make -j$(sysctl -n hw.logicalcpu)
+    make install
+    ```
+  </Step>
+  <Step title="Sign the application (Apple Silicon)">
+    On Apple Silicon (M1/M2) Macs running macOS Big Sur or later, sign the app for local use:
+
+    ```bash
+    codesign --force --deep -s - \
+        --entitlements ../misc/macos/entitlements/debug.entitlements \
+        macos/luanti.app
+    ```
+
+    <Note>
+      If you are using LuaJIT with `MAP_JIT` support, use `debug_map_jit.entitlements` instead.
+    </Note>
+  </Step>
+  <Step title="Run">
+    ```bash
+    open ./build/macos/luanti.app
+    ```
+  </Step>
+</Steps>
+
+## Build for distribution
+
+To distribute Luanti or submit it to the Mac App Store, generate an Xcode project.
+
+### Generate the Xcode project
+
+```bash
+mkdir build
+cd build
+
+cmake .. \
+    -DCMAKE_FIND_FRAMEWORK=LAST \
+    -DRUN_IN_PLACE=FALSE \
+    -DENABLE_GETTEXT=TRUE \
+    -DFREETYPE_LIBRARY=/path/to/lib/dir/libfreetype.a \
+    -DGETTEXT_INCLUDE_DIR=/path/to/include/dir \
+    -DGETTEXT_LIBRARY=/path/to/lib/dir/libintl.a \
+    -DLUA_LIBRARY=/path/to/lib/dir/libluajit-5.1.a \
+    -DOGG_LIBRARY=/path/to/lib/dir/libogg.a \
+    -DVORBIS_LIBRARY=/path/to/lib/dir/libvorbis.a \
+    -DVORBISFILE_LIBRARY=/path/to/lib/dir/libvorbisfile.a \
+    -DOPENAL_LIBRARY=/path/to/lib/dir/libopenal.a \
+    -DOPENAL_INCLUDE_DIR=/path/to/include/dir/AL \
+    -DZSTD_LIBRARY=/path/to/lib/dir/libzstd.a \
+    -DGMP_LIBRARY=/path/to/lib/dir/libgmp.a \
+    -DJSON_LIBRARY=/path/to/lib/dir/libjsoncpp.a \
+    -DENABLE_LEVELDB=OFF \
+    -DENABLE_POSTGRESQL=OFF \
+    -DENABLE_REDIS=OFF \
+    -DJPEG_LIBRARY=/path/to/lib/dir/libjpeg.a \
+    -DPNG_LIBRARY=/path/to/lib/dir/libpng.a \
+    -DCMAKE_EXE_LINKER_FLAGS=-lbz2 \
+    -GXcode
+```
+
+Replace each `/path/to/...` with the actual path to your static libraries (typically under your Homebrew `lib` directory).
+
+<Warning>
+  You must regenerate the Xcode project if you switch branches, commits, or make significant changes to the CMake configuration.
+</Warning>
+
+<Note>
+  If you are using LuaJIT with `MAP_JIT` support, add `-DXCODE_CODE_SIGN_ENTITLEMENTS=../misc/macos/entitlements/release_map_jit.entitlements` to the CMake command.
+</Note>
+
+### Build and run from Xcode
+
+<Steps>
+  <Step title="Open the project">
+    Open the generated Xcode project in `build/`.
+  </Step>
+  <Step title="Configure the scheme">
+    Select the `luanti` scheme. Configure your signing Team and any other required settings.
+  </Step>
+  <Step title="Build">
+    Run the Build command. The application appears in `build/build/Debug/`.
+  </Step>
+</Steps>
+
+### Archive for distribution
+
+<Steps>
+  <Step title="Open the project and select scheme">
+    Open the Xcode project and select the `luanti` scheme.
+  </Step>
+  <Step title="Configure signing">
+    Configure your signing Team and certificate.
+  </Step>
+  <Step title="Archive">
+    Run the Build command, then open the application archive in Finder. Copy the `.app` bundle out of the archive and test it.
+  </Step>
+</Steps>
+
+For a full list of CMake options, see the [compiling overview](/compiling/overview).

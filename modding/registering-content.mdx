@@ -1,0 +1,388 @@
+---
+title: "Registering Content"
+description: "How to register nodes, items, entities, craft recipes, chat commands, privileges, and aliases with the Luanti Lua API."
+---
+
+Luanti provides a family of `core.register_*` functions for adding content. All registration calls must happen at load time, during your mod's `init.lua` execution.
+
+<Warning>
+You must pass a **clean, fresh table** to each registration function. Do not reuse a table that has already been passed to another registration call — the engine modifies the table in place.
+</Warning>
+
+## core.register_node()
+
+Registers a placeable node (a block in the world).
+
+```lua
+core.register_node(name, nodedef)
+```
+
+Registered nodes appear in `core.registered_nodes[name]`.
+
+```lua
+core.register_node("mymod:stone", {
+    description = "My Stone",
+    tiles = {"mymod_stone.png"},
+    groups = {cracky = 3},
+    sounds = default.node_sound_stone_defaults(),
+})
+
+-- Override an existing node's fields without re-registering it
+core.override_item("default:mese", {
+    light_source = core.LIGHT_MAX
+}, {"sounds"})
+-- Second arg adds/overwrites fields; third arg lists fields to delete
+```
+
+See [Node documentation](/modding/nodes) for the full field reference.
+
+## core.register_craftitem()
+
+Registers a pure inventory item that has no node form.
+
+```lua
+core.register_craftitem(name, itemdef)
+```
+
+```lua
+core.register_craftitem("mymod:iron_lump", {
+    description = "Iron Lump",
+    inventory_image = "mymod_iron_lump.png",
+    groups = {metal = 1},
+
+    on_use = function(itemstack, user, pointed_thing)
+        -- Called when the player left-clicks with this item
+        local pos = user:get_pos()
+        core.log("action", user:get_player_name() .. " used iron lump at " .. dump(pos))
+        -- Return the modified stack (or nil to leave unchanged)
+        return itemstack
+    end,
+})
+```
+
+## core.register_tool()
+
+Registers a tool item. Tools differ from craftitems in that they can have `tool_capabilities` and receive wear.
+
+```lua
+core.register_tool("mymod:pick_stone", {
+    description = "Stone Pickaxe",
+    inventory_image = "mymod_pick_stone.png",
+    tool_capabilities = {
+        full_punch_interval = 1.2,
+        max_drop_level = 1,
+        groupcaps = {
+            cracky = {times = {[2] = 2.00, [3] = 1.20}, uses = 20, maxlevel = 1},
+        },
+        damage_groups = {fleshy = 4},
+    },
+    sound = {
+        breaks = "default_tool_breaks",
+    },
+})
+```
+
+See [Items documentation](/modding/items) for the tool capabilities field reference.
+
+## core.register_entity()
+
+Registers a dynamic entity (a Lua-controlled server-side object).
+
+```lua
+core.register_entity(name, entity_definition)
+```
+
+```lua
+core.register_entity("mymod:bouncy_ball", {
+    initial_properties = {
+        visual = "sprite",
+        textures = {"mymod_ball.png"},
+        physical = true,
+        collisionbox = {-0.3, -0.3, -0.3, 0.3, 0.3, 0.3},
+        visual_size = {x = 0.6, y = 0.6},
+    },
+
+    on_activate = function(self, staticdata, dtime_s)
+        self.object:set_velocity({x = 0, y = 5, z = 0})
+    end,
+
+    on_step = function(self, dtime, moveresult)
+        if moveresult and moveresult.touching_ground then
+            self.object:add_velocity({x = 0, y = 4, z = 0})
+        end
+    end,
+})
+
+-- Spawn the entity in the world
+local obj = core.add_entity({x = 0, y = 10, z = 0}, "mymod:bouncy_ball")
+```
+
+See [Entities documentation](/modding/entities) for the full callback and property reference.
+
+## core.register_craft()
+
+Registers a crafting recipe. Multiple recipe types are supported.
+
+```lua
+core.register_craft(recipe)
+```
+
+<Tabs>
+  <Tab title="Shaped">
+    The default type. Items must be placed in a specific pattern.
+
+    ```lua
+    core.register_craft({
+        -- type = "shaped" is the default, can be omitted
+        output = "mymod:pick_stone",
+        recipe = {
+            {"default:cobble", "default:cobble", "default:cobble"},
+            {"",               "default:stick",   ""},
+            {"",               "default:stick",   ""},
+        },
+    })
+    ```
+  </Tab>
+  <Tab title="Shapeless">
+    Items can be placed anywhere in the grid.
+
+    ```lua
+    core.register_craft({
+        type = "shapeless",
+        output = "mymod:mixed_dust",
+        recipe = {
+            "mymod:stone_dust",
+            "mymod:coal_dust",
+            "mymod:iron_dust",
+        },
+    })
+    ```
+  </Tab>
+  <Tab title="Cooking">
+    Used for furnaces and smelt-style recipes.
+
+    ```lua
+    core.register_craft({
+        type = "cooking",
+        output = "mymod:iron_ingot",
+        recipe = "mymod:iron_lump",
+        cooktime = 4.0,  -- seconds (default: 3.0)
+    })
+    ```
+  </Tab>
+  <Tab title="Fuel">
+    Associates an item with a burn time for furnaces.
+
+    ```lua
+    core.register_craft({
+        type = "fuel",
+        recipe = "mymod:coal_lump",
+        burntime = 20.0,  -- seconds
+    })
+
+    -- Fuel with a replacement (bucket becomes empty bucket)
+    core.register_craft({
+        type = "fuel",
+        recipe = "mymod:lava_bucket",
+        burntime = 60.0,
+        replacements = {{"mymod:lava_bucket", "mymod:empty_bucket"}},
+    })
+    ```
+  </Tab>
+  <Tab title="Groups in recipes">
+    Accept any item from a group as an ingredient.
+
+    ```lua
+    core.register_craft({
+        output = "mymod:plank 4",
+        recipe = {
+            {"group:tree"},
+        },
+    })
+
+    -- Require membership in multiple groups simultaneously
+    core.register_craft({
+        type = "shapeless",
+        output = "mymod:red_wool",
+        recipe = {"wool:white", "group:dye,basecolor_red"},
+    })
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Shaped recipes take priority over shapeless, and recipes without groups take priority over recipes with groups. Among equal-priority recipes, earlier registered ones win.
+</Info>
+
+## core.register_alias() and core.register_alias_force()
+
+Aliases let you redirect one item name to another. This is useful for backwards compatibility or convenience.
+
+```lua
+core.register_alias(alias, original_name)
+core.register_alias_force(alias, original_name)
+```
+
+The difference: if an item named `alias` already exists, `register_alias` does nothing while `register_alias_force` unregisters it first.
+
+```lua
+-- Simple shortcut alias
+core.register_alias("iron", "mymod:iron_lump")
+-- Players can now use "/giveme iron"
+
+-- Backwards compatibility alias for a renamed item
+core.register_alias("mymod:old_name", "mymod:new_name")
+```
+
+### Mapgen aliases
+
+Games must register mapgen aliases to tell the built-in map generators which nodes to use. For all non-V6 mapgens:
+
+```lua
+-- Essential for all non-V6 mapgens
+core.register_alias("mapgen_stone",              "default:stone")
+core.register_alias("mapgen_water_source",       "default:water_source")
+core.register_alias("mapgen_river_water_source", "default:river_water_source")
+
+-- For Mapgen V6 (also needs dirt, sand, tree, leaves, etc.)
+core.register_alias("mapgen_dirt",               "default:dirt")
+core.register_alias("mapgen_dirt_with_grass",    "default:dirt_with_grass")
+core.register_alias("mapgen_sand",               "default:sand")
+core.register_alias("mapgen_lava_source",        "default:lava_source")
+core.register_alias("mapgen_cobble",             "default:cobble")
+core.register_alias("mapgen_tree",               "default:tree")
+core.register_alias("mapgen_leaves",             "default:leaves")
+```
+
+See [Mapgen documentation](/modding/mapgen) for the complete alias list.
+
+## core.register_chatcommand()
+
+Registers a `/command` that players can type in chat.
+
+```lua
+core.register_chatcommand(cmd, chatcommand_definition)
+```
+
+```lua
+core.register_chatcommand("playtime", {
+    params = "[<player>]",
+    description = "Show how long you or another player has been online",
+    privs = {},  -- empty = no special privilege required
+    func = function(name, param)
+        local target = param ~= "" and param or name
+        local player = core.get_player_by_name(target)
+        if not player then
+            return false, "Player '" .. target .. "' is not online"
+        end
+        local stats = core.get_player_information(target)
+        return true, target .. " has played for " .. math.floor(stats.avg_rtt * 1000) .. "ms avg RTT"
+    end,
+})
+```
+
+The `func` callback receives the issuing player's name and a string with all the arguments. It returns a boolean (success/failure) and an optional string message.
+
+<Tip>
+Parameter convention in `params`:
+- `<name>` — required placeholder
+- `[<name>]` — optional parameter
+- `<a> | <b>` — exclusive or
+- `(<a> <b>) | <c>` — grouping
+</Tip>
+
+To require a privilege:
+
+```lua
+core.register_chatcommand("ban_player", {
+    params = "<name>",
+    description = "Ban a player",
+    privs = {ban = true},  -- requires the "ban" privilege
+    func = function(name, param)
+        if param == "" then
+            return false, "Usage: /ban_player <name>"
+        end
+        -- ...
+        return true, "Banned " .. param
+    end,
+})
+```
+
+## core.register_privilege()
+
+Registers a custom privilege that can be granted to players.
+
+```lua
+core.register_privilege(name, definition)
+```
+
+The `definition` can be either a plain description string or a table:
+
+```lua
+-- Simple form: description string only
+-- Privilege is automatically granted to singleplayer and admin
+core.register_privilege("my_priv", "Allows use of special features")
+
+-- Full table form
+core.register_privilege("builder", {
+    description = "Allows placing unlimited nodes",
+    give_to_singleplayer = true,
+    give_to_admin = true,
+
+    on_grant = function(name, granter_name)
+        if granter_name then
+            core.log("action", granter_name .. " granted 'builder' to " .. name)
+        end
+    end,
+
+    on_revoke = function(name, revoker_name)
+        core.chat_send_player(name, "Your builder privilege was revoked.")
+    end,
+})
+```
+
+To check whether a player has a privilege:
+
+```lua
+local has_priv, missing = core.check_player_privs(player_name, {builder = true})
+if not has_priv then
+    -- missing is a table of missing privilege names
+    return false, "Missing privileges: " .. table.concat(missing, ", ")
+end
+```
+
+## core.override_item()
+
+Overrides fields of an already-registered item without re-registering it. This is typically used by games to patch mods or by mods that depend on others.
+
+```lua
+core.override_item(name, redefinition, del_fields)
+```
+
+```lua
+-- Add a light source and remove sounds from an existing node
+core.override_item(
+    "default:mese",
+    {light_source = core.LIGHT_MAX},
+    {"sounds"}  -- fields to delete
+)
+```
+
+## Registered definition tables
+
+After registration, definitions are accessible via global tables:
+
+```lua
+core.registered_nodes        -- all nodes
+core.registered_craftitems   -- all craftitems
+core.registered_tools        -- all tools
+core.registered_items        -- all items (nodes + craftitems + tools)
+core.registered_entities     -- all entities
+core.registered_aliases      -- all aliases
+
+-- Access a definition
+local def = core.registered_nodes["default:stone"]
+if def then
+    core.log("info", "Stone drawtype: " .. (def.drawtype or "normal"))
+end
+```

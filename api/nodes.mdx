@@ -1,0 +1,288 @@
+---
+title: "Node API"
+description: "Reference for reading, writing, and querying nodes in the Luanti world map, including node metadata and timers."
+---
+
+Nodes are the fundamental building blocks of the Luanti world. Each node occupies a 1x1x1 cube and is identified by a name string plus two 8-bit parameters (`param1` and `param2`). This page covers functions for manipulating nodes at runtime.
+
+## Node table format
+
+Functions that accept or return a node use this table format:
+
+```lua
+{name = "default:stone", param1 = 0, param2 = 0}
+```
+
+If `param1` or `param2` are omitted when setting a node, they default to `0`.
+
+## Reading nodes
+
+<ParamField path="core.get_node(pos)" type="function">
+  Returns the node at the given position. Never returns `nil`; returns `{name="ignore", param1=0, param2=0}` for unloaded areas.
+
+  - `pos` (vector): World position `{x=number, y=number, z=number}`.
+
+  **Returns:** node table `{name, param1, param2}`
+</ParamField>
+
+<ParamField path="core.get_node_or_nil(pos)" type="function">
+  Same as `core.get_node`, but returns `nil` for unloaded areas instead of an "ignore" node.
+
+  - `pos` (vector): World position.
+
+  **Returns:** node table or `nil`
+</ParamField>
+
+<ParamField path="core.get_node_raw(x, y, z)" type="function">
+  Low-level, faster version of `get_node`. Takes separate integer coordinates.
+
+  **Returns:** `content_id`, `param1`, `param2`, `pos_ok`
+  - `pos_ok` is `false` and `content_id == core.CONTENT_IGNORE` for unloaded areas.
+  - Use `core.get_name_from_content_id(content_id)` to get the node name string.
+</ParamField>
+
+```lua
+-- Safe check: is the block loaded?
+local node = core.get_node_or_nil({x=0, y=0, z=0})
+if node then
+    print(node.name)
+end
+```
+
+## Writing nodes
+
+<ParamField path="core.set_node(pos, node)" type="function">
+  Sets the node at `pos`. Any existing metadata is deleted.
+
+  - `pos` (vector): World position.
+  - `node` (table): `{name=string, param1=number, param2=number}`. `param1` and `param2` default to `0` if omitted.
+</ParamField>
+
+<ParamField path="core.add_node(pos, node)" type="function">
+  Alias for `core.set_node`.
+</ParamField>
+
+<ParamField path="core.remove_node(pos)" type="function">
+  Removes the node at `pos` (equivalent to setting it to `"air"`, but slightly faster).
+
+  - `pos` (vector): World position.
+</ParamField>
+
+<ParamField path="core.swap_node(pos, node)" type="function">
+  Replaces the node at `pos` without clearing metadata and without triggering `on_construct` or `on_destruct` callbacks.
+
+  - `pos` (vector): World position.
+  - `node` (table): Replacement node.
+</ParamField>
+
+<ParamField path="core.bulk_set_node(positions, node)" type="function">
+  Sets the same node at every position in the list. Faster than calling `set_node` in a loop for scattered positions. Unlike a VoxelManip, this still triggers node callbacks.
+
+  - `positions` (table): List of position vectors, e.g. `{{x=0,y=1,z=1}, {x=1,y=2,z=2}}`.
+  - `node` (table): Node to set at all positions.
+</ParamField>
+
+```lua
+core.set_node({x=0, y=10, z=0}, {name="default:wood"})
+core.swap_node({x=0, y=10, z=0}, {name="default:stone"})
+core.bulk_set_node({{x=0,y=0,z=0},{x=1,y=0,z=0}}, {name="air"})
+```
+
+## Placing and digging
+
+<ParamField path="core.place_node(pos, node[, placer])" type="function">
+  Places a node with the same side effects a player placement would trigger, including `on_construct` and `after_place_node` callbacks.
+
+  - `placer` (ObjectRef, optional): The entity performing the placement.
+</ParamField>
+
+<ParamField path="core.dig_node(pos[, digger])" type="function">
+  Digs a node with the same effects a player dig would trigger.
+
+  - `digger` (ObjectRef, optional): The entity performing the dig.
+
+  **Returns:** `true` on success, `false` on failure (e.g. protected location).
+</ParamField>
+
+## Finding nodes
+
+<ParamField path="core.find_node_near(pos, radius, nodenames[, search_center])" type="function">
+  Searches for the nearest node matching any of the given names or groups within `radius` nodes of `pos`, using a maximum (Chebyshev) metric.
+
+  - `pos` (vector): Center of the search.
+  - `radius` (number): Search radius.
+  - `nodenames` (string or table): A node name string like `"default:dirt"`, a table of names, or group strings like `"group:tree"`.
+  - `search_center` (boolean, optional): If `true`, `pos` itself is also checked. Default: `false`.
+
+  **Returns:** position vector or `nil`
+</ParamField>
+
+<ParamField path="core.find_nodes_in_area(pos1, pos2, nodenames[, grouped])" type="function">
+  Returns all nodes matching the given names in the axis-aligned box from `pos1` to `pos2`.
+
+  - `pos1`, `pos2` (vector): Min and max corners of the search area.
+  - `nodenames` (string or table): Node name(s) or group strings.
+  - `grouped` (boolean, optional): If `true`, returns a table indexed by node name, each value being a list of positions.
+
+  **Returns:** (when `grouped` is false or absent) two values:
+  1. Table of all matching positions
+  2. Table mapping node name → count
+
+  Area volume is limited to 150,000,000 nodes.
+</ParamField>
+
+<ParamField path="core.find_nodes_in_area_under_air(pos1, pos2, nodenames)" type="function">
+  Like `find_nodes_in_area`, but only returns positions where the node directly above is air.
+
+  **Returns:** table of positions
+</ParamField>
+
+```lua
+-- Find the nearest water source within 10 nodes
+local water_pos = core.find_node_near(
+    player:get_pos(), 10, "default:water_source"
+)
+
+-- Count all stone in a 20x20x20 cube
+local positions, counts = core.find_nodes_in_area(
+    {x=-10, y=-10, z=-10},
+    {x=10, y=10, z=10},
+    {"default:stone"}
+)
+print("Stone count: " .. (counts["default:stone"] or 0))
+```
+
+## Light
+
+<ParamField path="core.get_node_light(pos[, timeofday])" type="function">
+  Returns the combined light value inside the node at `pos`.
+
+  - `pos` (vector): Position to sample.
+  - `timeofday` (number, optional): `nil` for current time, `0` for night, `0.5` for day.
+
+  **Returns:** number 0–15, or `nil` if the map is not loaded at that position.
+</ParamField>
+
+<ParamField path="core.get_natural_light(pos[, timeofday])" type="function">
+  Returns the sunlight or moonlight value at `pos` at the given time of day, accounting for obstructions.
+
+  **Returns:** number 0–15, or `nil` on failure.
+</ParamField>
+
+## Node metadata
+
+Node metadata stores extra key-value data and an inventory inside a placed node. Retrieve a `NodeMetaRef` with `core.get_meta(pos)`.
+
+<ParamField path="core.get_meta(pos)" type="function">
+  Returns the `NodeMetaRef` for the node at `pos`.
+
+  - `pos` (vector): World position.
+
+  **Returns:** `NodeMetaRef`
+</ParamField>
+
+### NodeMetaRef methods
+
+`NodeMetaRef` inherits all methods from `MetaDataRef` and adds:
+
+<ResponseField name="meta:get_inventory()" type="InvRef">
+  Returns the node's inventory reference.
+</ResponseField>
+
+<ResponseField name="meta:set_string(key, value)" type="nil">
+  Sets a string field. Setting value to `""` deletes the key.
+</ResponseField>
+
+<ResponseField name="meta:get_string(key)" type="string">
+  Returns the string value for `key`, or `""` if not set.
+</ResponseField>
+
+<ResponseField name="meta:set_int(key, value)" type="nil">
+  Stores an integer (converted to string internally).
+</ResponseField>
+
+<ResponseField name="meta:get_int(key)" type="number">
+  Returns the integer value for `key`, or `0` if not set.
+</ResponseField>
+
+<ResponseField name="meta:set_float(key, value)" type="nil">
+  Stores a 64-bit float (converted to string internally).
+</ResponseField>
+
+<ResponseField name="meta:get_float(key)" type="number">
+  Returns the float value for `key`, or `0` if not set.
+</ResponseField>
+
+<ResponseField name="meta:get_keys()" type="table">
+  Returns a list of all key strings in the metadata.
+</ResponseField>
+
+<ResponseField name="meta:mark_as_private(name or table)" type="nil">
+  Prevents the specified key(s) from being sent to clients. Call this during `on_construct` when initializing the metadata.
+</ResponseField>
+
+```lua
+-- Set up a chest node with metadata
+core.register_node("mymod:chest", {
+    on_construct = function(pos)
+        local meta = core.get_meta(pos)
+        meta:set_string("infotext", "Chest")
+        meta:set_string("formspec",
+            "size[8,9]" ..
+            "list[context;main;0,0;8,4;]" ..
+            "list[current_player;main;0,5;8,4;]")
+        local inv = meta:get_inventory()
+        inv:set_size("main", 32)
+    end,
+    -- ...
+})
+```
+
+## Node timers
+
+Node timers trigger `on_timer` callbacks with high precision. Retrieve a `NodeTimerRef` with `core.get_node_timer(pos)`.
+
+<ParamField path="core.get_node_timer(pos)" type="function">
+  Returns a `NodeTimerRef` for the node at `pos`.
+
+  **Returns:** `NodeTimerRef`
+</ParamField>
+
+### NodeTimerRef methods
+
+<ResponseField name="timer:start(timeout)" type="nil">
+  Starts the timer. The node's `on_timer` callback fires after `timeout` seconds.
+</ResponseField>
+
+<ResponseField name="timer:stop()" type="nil">
+  Stops the timer.
+</ResponseField>
+
+<ResponseField name="timer:set(timeout, elapsed)" type="nil">
+  Sets the timer state directly. The callback fires after `(timeout - elapsed)` seconds.
+</ResponseField>
+
+<ResponseField name="timer:is_started()" type="boolean">
+  Returns `true` if the timer is active.
+</ResponseField>
+
+<ResponseField name="timer:get_timeout()" type="number">
+  Returns the current timeout. Returns `0` if inactive.
+</ResponseField>
+
+<ResponseField name="timer:get_elapsed()" type="number">
+  Returns the elapsed time since the timer was started.
+</ResponseField>
+
+```lua
+core.register_node("mymod:furnace", {
+    on_construct = function(pos)
+        -- Start a 1-second repeating timer
+        core.get_node_timer(pos):start(1.0)
+    end,
+    on_timer = function(pos, elapsed)
+        -- Do furnace processing...
+        return true  -- return true to repeat
+    end,
+})
+```

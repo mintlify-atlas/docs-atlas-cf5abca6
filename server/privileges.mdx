@@ -1,0 +1,204 @@
+---
+title: "Privilege System"
+description: "How Luanti's privilege system works, including built-in privileges, granting and revoking, the Lua API for checking and managing privileges, and the auth backend."
+---
+
+Privileges give server administrators fine-grained control over what players can do. Every player starts with a default set of privileges and administrators can grant or revoke privileges at any time, both via in-game commands and via the Lua API.
+
+## Built-in Privileges
+
+Luanti ships with a set of built-in privileges grouped by purpose.
+
+### Basic Privileges
+
+These are normally granted to all players via the `default_privs` setting:
+
+| Privilege | Description |
+|---|---|
+| `interact` | Dig, build, and interact with nodes, entities, and other players. Without this privilege, a player can only travel and observe. |
+| `shout` | Send and receive chat messages. |
+
+### Advanced Gameplay Privileges
+
+| Privilege | Description |
+|---|---|
+| `fly` | Use fly mode to move freely without falling. Enabled client-side with the `free_move` setting. |
+| `fast` | Use fast mode to move at maximum speed. Enabled client-side with the `fast_move` setting. |
+| `noclip` | Fly through solid nodes (walls, etc.). Requires `fly`. |
+| `teleport` | Use `/teleport` to move to any position in the world. |
+| `bring` | Teleport other players to yourself. |
+| `give` | Use `/give` and `/giveme` to give items to yourself or others. |
+| `settime` | Use `/time` to change the current in-game time. |
+| `debug` | Enable wireframe rendering mode on the client. |
+
+### Security & Moderation Privileges
+
+| Privilege | Description |
+|---|---|
+| `kick` | Disconnect other players with `/kick`. |
+| `ban` | Ban players by name or IP with `/ban`. |
+| `privs` | View and modify privileges of any player using `/grant` and `/revoke`. |
+| `basic_privs` | Grant or revoke only the privileges listed in the `basic_privs` setting. |
+| `password` | Use `/setpassword` and `/clearpassword` to manage player passwords. |
+| `protection_bypass` | Bypass node protection. Implementation is left to games/mods. |
+
+### Administrative Privileges
+
+| Privilege | Description |
+|---|---|
+| `server` | Use `/fixlight`, `/deleteblocks`, `/deleteobjects`, and `/clearinv` (on others). |
+| `rollback` | Use `/rollback_check` and `/rollback` to inspect and undo changes. |
+
+## Granting and Revoking Privileges
+
+As an in-game admin or player with the `privs` privilege, use the following chat commands:
+
+```
+/grant <player> <privilege>
+/grant <player> all
+/grantme <privilege>
+
+/revoke <player> <privilege>
+/revoke <player> all
+/revokeme <privilege>
+```
+
+Examples:
+
+```
+/grant alice fly
+/grant alice fly, fast, noclip
+/revoke bob interact
+/grantme fly
+```
+
+Use `/privs <player>` to inspect a player's current privileges, or just `/privs` to see your own.
+
+## Default Privilege Settings
+
+Two `minetest.conf` settings control the default privilege assignment:
+
+```ini
+# Privileges automatically granted to every new player
+default_privs = interact, shout
+
+# Privileges that players with 'basic_privs' can grant/revoke
+basic_privs = interact, shout
+```
+
+The `basic_privs` mechanism lets you delegate limited moderation. For example, give trusted players `basic_privs` and they can grant `interact` and `shout` to newcomers without being able to grant administrative privileges.
+
+## Checking Privileges in Lua
+
+Use `core.check_player_privs` to verify that a player has required privileges before performing an operation:
+
+```lua
+-- Check using a table
+local has_privs, missing = core.check_player_privs(player_or_name, {
+    interact = true,
+    fly = true,
+})
+
+if not has_privs then
+    -- missing is a list of privilege names the player lacks
+    core.chat_send_player(name, "You need: " .. table.concat(missing, ", "))
+end
+
+-- Check using a vararg list of strings
+local ok, missing = core.check_player_privs(name, "interact", "shout")
+```
+
+When registering a chat command, declare required privileges in the command definition and Luanti will check them automatically:
+
+```lua
+core.register_chatcommand("mycommand", {
+    privs = { interact = true, fly = true },
+    description = "Does something special",
+    func = function(name, param)
+        -- Only called if player has interact + fly
+    end,
+})
+```
+
+## Reading and Setting Privileges
+
+```lua
+-- Read all privileges for a player
+local privs = core.get_player_privs("alice")
+-- privs = { interact = true, shout = true, fly = true }
+
+-- Replace the entire privilege set
+core.set_player_privs("alice", { interact = true, fly = true })
+-- alice now has ONLY interact and fly
+
+-- Make incremental changes without overwriting the full set
+core.change_player_privs("alice", { fly = true, noclip = false })
+-- grants fly, revokes noclip, leaves everything else unchanged
+```
+
+## Registering Custom Privileges
+
+Mods can register their own privileges to expose fine-grained control to server admins:
+
+```lua
+core.register_privilege("myadmin", {
+    description = "Can use special admin features of mymod",
+
+    -- Automatically grant to singleplayer and the server admin
+    give_to_singleplayer = true,
+    give_to_admin = true,
+
+    on_grant = function(name, granter_name)
+        core.log("action", name .. " was granted myadmin by " .. (granter_name or "(mod)"))
+    end,
+
+    on_revoke = function(name, revoker_name)
+        core.log("action", name .. " had myadmin revoked by " .. (revoker_name or "(mod)"))
+    end,
+})
+```
+
+<Note>
+  Privileges should strictly increase a player's abilities. Do not register privileges that restrict default behaviour — use other mechanisms (e.g., node protection, game-specific checks) for restrictions.
+</Note>
+
+If you pass a plain string instead of a table, it is treated as the description and the privilege is automatically granted to singleplayer and the admin:
+
+```lua
+core.register_privilege("myadmin", "Can use special admin features of mymod")
+```
+
+## Subscribing to Privilege Changes
+
+```lua
+core.register_on_priv_grant(function(name, granter, priv)
+    core.log("action", priv .. " granted to " .. name)
+    -- Return true to stop other on_priv_grant callbacks from firing
+end)
+
+core.register_on_priv_revoke(function(name, revoker, priv)
+    core.log("action", priv .. " revoked from " .. name)
+end)
+```
+
+Note: these callbacks fire twice when a player is responsible — once with the player name and once with `granter`/`revoker` set to `nil`.
+
+## The Auth Backend
+
+Authentication data (passwords and privileges) is stored by the active auth backend, configured in `world.mt`:
+
+```ini
+auth_backend = files
+```
+
+- **`files`** — Stores data in `auth.txt` inside the world directory. One line per player: `<name>:<password hash>:<priv1,...>`.
+- **`sqlite3`** — Stores data in `auth.sqlite` using two tables: `auth` (credentials) and `user_privileges` (one row per priv per player).
+- **`postgresql`** — Uses a PostgreSQL database configured with `pgsql_auth_connection` in `world.mt`.
+
+The auth handler can be replaced entirely from Lua with `core.register_authentication_handler()`. Only one mod may register a custom auth handler.
+
+To reload auth data from disk at runtime:
+
+```lua
+core.auth_reload()
+```

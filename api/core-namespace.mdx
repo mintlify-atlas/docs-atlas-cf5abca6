@@ -1,0 +1,271 @@
+---
+title: "Core Namespace Functions"
+description: "Reference for key global utility functions in the core namespace: logging, mod paths, version info, timing, translation, and server information."
+---
+
+The `core` namespace (aliased as `minetest`) provides global utility functions available to all mods. This page covers the most commonly used utilities. Registration functions are covered in the [Callbacks](/api/callbacks) reference.
+
+## Logging
+
+<ParamField path="core.log([level,] text)" type="function">
+  Writes a message to the server log.
+
+  - `level` (string, optional): Log level. One of `"none"`, `"error"`, `"warning"`, `"action"`, `"info"`, or `"verbose"`. Defaults to `"none"`.
+  - `text` (string): The message to log.
+</ParamField>
+
+```lua
+core.log("action", "Player joined the game")
+core.log("warning", "Deprecated function called")
+core.log("error", "Failed to load data")
+
+-- Without a level (uses "none")
+core.log("Simple message")
+```
+
+<ParamField path="core.debug(...)" type="function">
+  Converts all arguments to strings, joins them with tabs, and passes the result to `core.log`. Behaves similarly to `print`.
+</ParamField>
+
+## Mod paths and names
+
+<ParamField path="core.get_current_modname()" type="function">
+  Returns the name of the currently loading mod as a string. Only meaningful when called at load time from within `init.lua`.
+
+  **Returns:** `string` — the mod name, e.g. `"mymod"`
+</ParamField>
+
+<ParamField path="core.get_modpath(modname)" type="function">
+  Returns the absolute directory path of the named mod.
+
+  - `modname` (string): The name of the mod to look up.
+
+  **Returns:** `string` or `nil`. Returns `nil` if the mod is not enabled or does not exist. Works even before the mod has finished loading.
+</ParamField>
+
+<ParamField path="core.get_modnames([load_order])" type="function">
+  Returns a list of all mod names that are loaded or will be loaded during startup.
+
+  - `load_order` (boolean, optional): If `true`, returns names sorted by load order. If `false` or omitted, returns names sorted alphabetically. Available since 5.16.0.
+
+  **Returns:** `table` — list of mod name strings.
+</ParamField>
+
+```lua
+local modname = core.get_current_modname()
+local modpath = core.get_modpath(modname)
+core.log("action", modname .. " lives at: " .. modpath)
+```
+
+## Game and world information
+
+<ParamField path="core.get_game_info()" type="function">
+  Returns a table with information about the running game.
+
+  **Returns:**
+  ```lua
+  {
+      id     = string,   -- game ID
+      title  = string,   -- human-readable title
+      author = string,   -- ContentDB username
+      path   = string,   -- root directory of the game
+  }
+  ```
+</ParamField>
+
+<ParamField path="core.get_worldpath()" type="function">
+  Returns the path to the current world directory, e.g. `"/home/user/.minetest/world"`. Useful for storing custom data files.
+
+  **Returns:** `string`
+</ParamField>
+
+<ParamField path="core.get_mod_data_path()" type="function">
+  Returns a per-mod directory for storing data independently of any world, e.g. `"/home/user/.minetest/mod_data/mymod"`. Must be called at load time.
+
+  **Returns:** `string`
+</ParamField>
+
+<ParamField path="core.get_server_info()" type="function">
+  Returns a table with server connection details.
+
+  **Returns:**
+  ```lua
+  {
+      address    = string,  -- address the server is hosted on
+      bind_address = string,
+      port       = number,
+  }
+  ```
+</ParamField>
+
+<ParamField path="core.get_server_uptime()" type="function">
+  Returns the number of seconds the server has been running.
+
+  **Returns:** `number`
+</ParamField>
+
+<ParamField path="core.get_server_max_lag()" type="function">
+  Returns the current maximum server lag in seconds, or `nil` if the server has not fully loaded yet.
+
+  **Returns:** `number` or `nil`
+</ParamField>
+
+## Engine version
+
+<ParamField path="core.get_version()" type="function">
+  Returns a table with engine version components. Use for display only — not for feature detection.
+
+  **Returns:**
+  ```lua
+  {
+      project   = string,  -- "Luanti"
+      string    = string,  -- e.g. "5.10.0-dev"
+      proto_min = number,  -- minimum supported protocol version
+      proto_max = number,  -- maximum supported protocol version
+      hash      = string,  -- full git version, if available
+      is_dev    = boolean, -- true for development builds
+  }
+  ```
+</ParamField>
+
+```lua
+local v = core.get_version()
+core.log("action", "Running " .. v.project .. " " .. v.string)
+```
+
+<Tip>
+To check for features, test function existence or use `core.features` rather than comparing version strings.
+</Tip>
+
+## Timing
+
+<ParamField path="core.after(time, func, ...)" type="function">
+  Schedules `func` to be called after at least `time` seconds. The optional extra arguments are passed to `func` when it runs.
+
+  - `time` (number): Delay in seconds. Fractional values are supported. Use `0` to run in the next server step.
+  - `func` (function): The function to call.
+  - `...`: Optional arguments forwarded to `func`.
+
+  **Returns:** A job table with a `cancel()` method.
+
+  Jobs scheduled for earlier times run first. If multiple jobs expire at the same time, they run in registration order.
+</ParamField>
+
+```lua
+-- Run once after 5 seconds
+local job = core.after(5, function(player_name)
+    local player = core.get_player_by_name(player_name)
+    if player then
+        core.chat_send_player(player_name, "5 seconds have passed!")
+    end
+end, "singleplayer")
+
+-- Cancel if needed
+job:cancel()
+```
+
+## Singleplayer check
+
+<ParamField path="core.is_singleplayer()" type="function">
+  Returns `true` if the server is running in singleplayer mode.
+
+  **Returns:** `boolean`
+</ParamField>
+
+## Translation
+
+<ParamField path="core.translate(textdomain, str, ...)" type="function">
+  Translates `str` using the given textdomain. Arguments replace `@1`, `@2`, etc. placeholders in the string. The textdomain should match your mod name to avoid conflicts.
+
+  - `textdomain` (string): The textdomain for disambiguation.
+  - `str` (string): The string to translate.
+  - `...`: Replacement arguments for `@n` placeholders.
+
+  **Returns:** `string` — the translated and interpolated string.
+</ParamField>
+
+<ParamField path="core.get_translator(textdomain)" type="function">
+  Returns a shorthand translation function `S` (and plural variant `PS`) bound to the given textdomain. This is the idiomatic way to set up translations in a mod.
+
+  **Returns:** `S, PS` — two functions.
+</ParamField>
+
+```lua
+-- Idiomatic translation setup at the top of init.lua
+local S, PS = core.get_translator("mymod")
+
+-- Single string
+core.register_node("mymod:apple", {
+    description = S("Apple"),
+    -- ...
+})
+
+-- String with argument
+core.register_on_joinplayer(function(player)
+    local name = player:get_player_name()
+    core.chat_send_player(name, S("Welcome, @1!", name))
+end)
+```
+
+## Player utilities
+
+<ParamField path="core.get_player_by_name(name)" type="function">
+  Returns an `ObjectRef` for the named player, or nothing if the player is offline or does not exist.
+
+  - `name` (string): The player's username.
+
+  **Returns:** `ObjectRef` or nothing.
+</ParamField>
+
+<ParamField path="core.get_connected_players()" type="function">
+  Returns a list of `ObjectRef`s for all currently connected players.
+
+  **Returns:** `table` — list of `ObjectRef`s.
+</ParamField>
+
+<ParamField path="core.is_player(obj)" type="function">
+  Returns `true` if `obj` is a player `ObjectRef`.
+
+  **Returns:** `boolean`
+</ParamField>
+
+<ParamField path="core.player_exists(name)" type="function">
+  Returns `true` if a player with the given name has ever joined the server, regardless of whether they are currently online.
+
+  **Returns:** `boolean`
+</ParamField>
+
+## Chat
+
+<ParamField path="core.chat_send_all(text)" type="function">
+  Sends `text` as a chat message to all connected players.
+</ParamField>
+
+<ParamField path="core.chat_send_player(name, text)" type="function">
+  Sends `text` as a chat message to the player with the given `name`.
+</ParamField>
+
+## Async execution
+
+<ParamField path="core.handle_async(func, callback, ...)" type="function">
+  Queues `func` to run in an isolated async environment on a worker thread. When `func` returns, `callback` is called in the main environment with the return values.
+
+  - `func` (function): Function to run asynchronously. Cannot access the map, entities, or players.
+  - `callback` (function): Called with the return values of `func`.
+  - `...`: Optional arguments forwarded to `func`.
+
+  **Returns:** An `AsyncJob` with a `cancel()` method.
+</ParamField>
+
+```lua
+core.handle_async(
+    function(data)
+        -- heavy computation here (no map access)
+        return data .. " processed"
+    end,
+    function(result)
+        core.log("action", result)
+    end,
+    "input"
+)
+```

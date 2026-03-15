@@ -1,0 +1,330 @@
+---
+title: "Items"
+description: "Reference for Luanti item definitions, tool capabilities, craft item callbacks, ItemStack operations, and craft recipe types."
+---
+
+In Luanti, "item" is the umbrella term for anything that can exist in an inventory. There are three kinds:
+
+- **Node items**: items that place a node when used (registered with `core.register_node`)
+- **Craft items**: pure inventory items with no node form (registered with `core.register_craftitem`)
+- **Tools**: items that can dig nodes and deal damage, and receive wear (registered with `core.register_tool`)
+
+All three share the same item definition fields, with nodes and tools adding extra fields on top.
+
+## Item definition fields
+
+```lua
+core.register_craftitem("mymod:my_item", {
+    -- Display
+    description = "My Item",
+    -- Can contain newlines: description = "Line 1\nLine 2"
+    short_description = "My Item",  -- single-line, for tooltips
+
+    -- Appearance
+    inventory_image = "mymod_item.png",
+    inventory_overlay = "mymod_item_overlay.png",  -- not affected by colorization
+    wield_image = "mymod_item.png",
+    wield_overlay = "mymod_item_overlay.png",
+    wield_scale = {x = 1, y = 1, z = 1},
+
+    -- Grouping
+    groups = {food = 1, edible = 2},
+
+    -- Stack behavior
+    stack_max = 99,  -- default from setting "default_stack_max"
+    range = 4.0,     -- pointing range when held
+
+    -- Lighting
+    light_source = 0,  -- 0–14; use core.LIGHT_MAX for maximum
+
+    -- Color
+    color = "#ffffffff",  -- ColorSpec multiplier
+    palette = "",          -- palette image (256px wide)
+
+    -- Sounds
+    sound = {
+        breaks = "default_tool_breaks",  -- tool breakage sound
+        eat    = "default_item_eat",     -- when eaten via core.do_item_eat
+        punch_use     = "default_punch",  -- punching/using sound
+        punch_use_air = "default_punch",  -- punching into empty air
+    },
+})
+```
+
+## Item callbacks
+
+<Tabs>
+  <Tab title="on_use">
+    Called when the player presses the punch/dig key with this item held.
+    Defining this prevents the normal punch/dig behavior.
+
+    ```lua
+    on_use = function(itemstack, user, pointed_thing)
+        -- user: ObjectRef (can be nil)
+        -- pointed_thing: what the player is pointing at
+        --   {type="node", under=pos, above=pos}
+        --   {type="object", ref=ObjectRef}
+        --   {type="nothing"}
+
+        -- Consume one item from the stack
+        itemstack:take_item()
+
+        -- Heal the player
+        user:set_hp(user:get_hp() + 2)
+
+        -- Return nil to leave inventory unchanged,
+        -- or return the (modified) itemstack
+        return itemstack
+    end,
+    ```
+  </Tab>
+  <Tab title="on_place">
+    Called when the player presses the place key while pointing at a node.
+
+    ```lua
+    on_place = function(itemstack, placer, pointed_thing)
+        -- Default: core.item_place
+        -- Return leftover itemstack, or nil to not modify inventory
+        if pointed_thing.type ~= "node" then
+            return
+        end
+        -- Custom placement logic...
+        return itemstack
+    end,
+    ```
+  </Tab>
+  <Tab title="on_secondary_use">
+    Same as `on_place` but called when not pointing at a node.
+
+    ```lua
+    on_secondary_use = function(itemstack, user, pointed_thing)
+        -- Called when placing/using into the air
+        return itemstack
+    end,
+    ```
+  </Tab>
+  <Tab title="after_use">
+    Called after digging a node. Used to override default tool wear handling.
+
+    ```lua
+    after_use = function(itemstack, user, node, digparams)
+        -- digparams.wear: how much wear to apply
+        -- Return leftover itemstack or nil
+        itemstack:add_wear(digparams.wear)
+        return itemstack
+    end,
+    ```
+  </Tab>
+  <Tab title="on_drop">
+    Called when the player drops the item.
+
+    ```lua
+    on_drop = function(itemstack, dropper, pos)
+        -- Default: core.item_drop
+        return core.item_drop(itemstack, dropper, pos)
+    end,
+    ```
+  </Tab>
+</Tabs>
+
+## Tool capabilities
+
+Tools define `tool_capabilities` to specify which node groups they can dig and how fast, as well as damage to entities.
+
+```lua
+core.register_tool("mymod:pick_iron", {
+    description = "Iron Pickaxe",
+    inventory_image = "mymod_pick_iron.png",
+    tool_capabilities = {
+        -- Full damage is dealt only if this time elapses between punches.
+        -- Punching faster than this scales damage down proportionally.
+        full_punch_interval = 1.0,  -- seconds
+
+        -- Suggested maximum drop level (not enforced by the engine)
+        max_drop_level = 1,
+
+        -- One entry per node group the tool can dig
+        groupcaps = {
+            -- cracky: digging times at levels 1, 2, 3; 50 uses at max level
+            cracky = {times = {[1]=3.00, [2]=1.50, [3]=0.80}, uses = 50, maxlevel = 2},
+        },
+
+        -- Damage dealt to different entity armor groups
+        damage_groups = {fleshy = 6},
+
+        -- How many uses before breaking from punching (0 = infinite)
+        punch_attack_uses = 30,
+    },
+
+    -- Wear bar colors (how the durability bar is colored)
+    wear_color = {
+        blend = "linear",
+        color_stops = {
+            [0.0] = "#ff0000",  -- red when broken
+            [0.5] = "#ffff00",  -- yellow at half
+            [1.0] = "#00ff00",  -- green when new
+        },
+    },
+})
+```
+
+### Understanding dig times and levels
+
+The `times` table maps node group ratings to digging times (in seconds). The `maxlevel` limits which nodes the tool can dig — nodes with `level > maxlevel` cannot be dug.
+
+For each level below `maxlevel`, uses are multiplied by 3:
+
+```
+-- Tool: cracky maxlevel=2, uses=20, times={[2]=1.50, [3]=0.80}
+cracky group:    1      2      3   (node rating)
+                 -   1.50   0.80   (dig time in seconds)
+uses:            -     180     60  (20 * 3^(2-level))
+```
+
+<Note>
+At rating `cracky=0`, the node is not diggable. Tool capabilities that don't list a group means the tool cannot dig that group at all.
+</Note>
+
+## ItemStack
+
+Inventory slots hold `ItemStack` objects. You work with them in callbacks and inventory operations:
+
+```lua
+-- Create an ItemStack
+local stack = ItemStack("default:stone 5")
+local empty = ItemStack("")
+
+-- Inspect the stack
+stack:get_name()       -- "default:stone"
+stack:get_count()      -- 5
+stack:get_wear()       -- 0 (for non-tools) to 65535 (fully worn)
+stack:is_empty()       -- false
+stack:get_definition() -- returns the item definition table
+
+-- Modify the stack
+stack:set_count(10)
+stack:add_wear(1000)   -- add wear (tools only)
+stack:set_wear(0)      -- reset wear
+
+-- Take and add items
+local taken = stack:take_item(1)  -- takes 1 item, returns ItemStack
+local leftover = stack:add_item(ItemStack("default:stone 3"))
+
+-- Item metadata
+local meta = stack:get_meta()
+meta:set_string("description", "A special stone")
+meta:set_string("color", "#ff0000")
+local desc = stack:get_description()   -- reads from meta or item def
+local short = stack:get_short_description()
+
+-- Serialize to/from a string
+local s = stack:to_string()  -- e.g. "default:stone 5"
+local s2 = stack:get_stack_string()  -- includes metadata
+```
+
+### Item metadata special keys
+
+```lua
+local meta = stack:get_meta()
+
+-- Override displayed description
+meta:set_string("description", "Enchanted Sword\nDamage: +10")
+meta:set_string("short_description", "Enchanted Sword")
+
+-- Override images
+meta:set_string("inventory_image", "enchanted_sword.png")
+meta:set_string("wield_image",     "enchanted_sword.png")
+
+-- Set color
+meta:set_string("color", "#ff8800")
+
+-- Override pointing range
+meta:set_float("range", 6.0)
+```
+
+## Inventory management
+
+Inventories are accessed via `InvRef` objects, obtained from players or node metadata:
+
+```lua
+-- Player inventory
+local player = core.get_player_by_name("singleplayer")
+local inv = player:get_inventory()
+
+-- Node metadata inventory
+local meta = core.get_meta(pos)
+local inv = meta:get_inventory()
+
+-- InvRef operations
+inv:set_size("main", 32)          -- create/resize a list
+inv:get_size("main")              -- returns 32
+inv:add_item("main", "default:stone 5")  -- returns leftover stack
+inv:remove_item("main", "default:stone 2")  -- returns removed stack
+inv:contains_item("main", "default:stone 3")  -- returns bool
+inv:is_empty("main")              -- returns bool
+
+-- Set/get individual slots
+inv:set_stack("main", 1, ItemStack("default:wood"))
+local stack = inv:get_stack("main", 1)
+
+-- Get all items in a list
+local list = inv:get_list("main")  -- table of ItemStacks
+inv:set_list("main", list)         -- set the whole list at once
+```
+
+## Craft recipes
+
+See [Registering Content](/modding/registering-content) for the full recipe reference. Here is a quick summary:
+
+<CardGroup cols={2}>
+  <Card title="Shaped" icon="border-all">
+    Items in a fixed 2D pattern. Default type when `type` is omitted.
+  </Card>
+  <Card title="Shapeless" icon="shuffle">
+    Items in any order and position. Use `type = "shapeless"`.
+  </Card>
+  <Card title="Cooking" icon="fire">
+    Single input → single output with a cook time. Use `type = "cooking"`.
+  </Card>
+  <Card title="Fuel" icon="bolt">
+    Item → burn time (no output). Use `type = "fuel"`.
+  </Card>
+</CardGroup>
+
+```lua
+-- Retrieve craft result programmatically
+local output, decremented_input = core.get_craft_result({
+    method = "normal",  -- "normal", "cooking", or "fuel"
+    width = 3,
+    items = {
+        ItemStack("default:cobble"),
+        ItemStack("default:cobble"),
+        ItemStack("default:cobble"),
+        ItemStack(""),
+        ItemStack("default:stick"),
+        ItemStack(""),
+        ItemStack(""),
+        ItemStack("default:stick"),
+        ItemStack(""),
+    },
+})
+-- output.item is the result ItemStack
+-- output.time is the cooking time (for cooking/fuel)
+```
+
+## core.get_item_def()
+
+Retrieve an item definition at runtime:
+
+```lua
+-- Returns the definition table, or nil if not registered
+local def = core.registered_items["default:stone"]
+if def then
+    print(def.description)      -- "Stone"
+    print(def.drawtype)         -- "normal" (for nodes)
+    print(dump(def.groups))     -- {cracky=3, stone=1, ...}
+end
+
+-- Get a group rating
+local cracky = core.get_item_group("default:stone", "cracky")  -- 3
+```

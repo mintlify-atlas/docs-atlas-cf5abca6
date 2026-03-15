@@ -1,0 +1,150 @@
+---
+title: "Naming Conventions"
+description: "How to name registered content in Luanti: the modname:itemname format, allowed characters, overriding registrations, and practical examples."
+---
+
+Luanti enforces a naming convention for all registered content — nodes, items, entities, and other registered objects. Following these conventions prevents naming conflicts between mods and protects map data from corruption.
+
+## The `modname:itemname` format
+
+Every registered name must follow this structure:
+
+```
+modname:itemname
+```
+
+- **`modname`** — the name of the mod that owns this registration (matches the `name` field in `mod.conf`).
+- **`itemname`** — a descriptive identifier for the specific item, node, or entity.
+
+The engine enforces this format through the mod loader. A mod can only register names using its own mod name as the prefix.
+
+```lua
+-- Registering a node in mod "mymod"
+core.register_node("mymod:copper_ore", {
+    description = "Copper Ore",
+    tiles = {"mymod_copper_ore.png"},
+    groups = {cracky = 2},
+})
+
+-- Registering a craftitem in mod "mymod"
+core.register_craftitem("mymod:copper_ingot", {
+    description = "Copper Ingot",
+    inventory_image = "mymod_copper_ingot.png",
+})
+```
+
+## Allowed characters
+
+The `modname` portion and the `itemname` portion follow different character rules.
+
+### Mod names
+
+Mod names (and therefore the prefix portion of registered names) should use:
+
+```
+a-zA-Z0-9_
+```
+
+### Item name portion
+
+The `<itemname>` after the colon may contain:
+
+```
+a-zA-Z0-9_
+```
+
+<Warning>
+Spaces, hyphens, and other special characters are not permitted in registered names. Using disallowed characters can corrupt map data because node names are stored in the world database.
+</Warning>
+
+## Overriding registrations with the `:` prefix
+
+You can override an existing registration from another mod by prefixing the full name with `:`.
+
+```lua
+-- Override experimental:tnt from within another mod
+core.register_node(":experimental:tnt", {
+    description = "Enhanced TNT",
+    tiles = {"mymod_tnt.png"},
+    -- ... other fields
+})
+```
+
+<Note>
+To override `experimental:tnt`, your mod must list `experimental` as a dependency in `mod.conf`. This ensures the original registration exists before you override it.
+</Note>
+
+The `:` prefix has two common uses:
+
+<CardGroup cols={2}>
+  <Card title="Override another mod's content" icon="pencil">
+    Replace a node, item, or other registration from a dependency with your own version. The overriding mod must depend on the mod being overridden.
+  </Card>
+  <Card title="Maintain backwards compatibility" icon="clock-rotate-left">
+    Use the `:` prefix to re-register content under a new name while aliasing the old name, keeping older worlds loading correctly.
+  </Card>
+</CardGroup>
+
+## Full example
+
+Suppose the mod `experimental` registers an item named `tnt`:
+
+```lua
+-- Inside mod "experimental": init.lua
+core.register_node("experimental:tnt", {
+    description = "TNT",
+    tiles = {"experimental_tnt.png"},
+    groups = {dig_immediate = 2},
+})
+```
+
+The correct registered name is `experimental:tnt`. Any mod that wants to redefine this item uses the `:` prefix:
+
+```lua
+-- Inside another mod's init.lua
+-- mod.conf must contain: depends = experimental
+core.register_node(":experimental:tnt", {
+    description = "TNT (overridden)",
+    tiles = {"mymod_tnt_new.png"},
+    groups = {dig_immediate = 2, tnt = 1},
+})
+```
+
+## Aliases
+
+Aliases let you create alternative names that resolve to an existing registered name. This is useful for backwards compatibility and for creating short convenience names.
+
+```lua
+-- Create an alias so "/giveme stuff" works
+core.register_alias("stuff", "epiclylongmodname:stuff")
+
+-- Force-register an alias, unregistering any existing item with that name
+core.register_alias_force("oldmod:thing", "newmod:thing")
+```
+
+`core.register_alias` does nothing if an item named `alias` already exists. `core.register_alias_force` unregisters any existing item at that name before creating the alias.
+
+### Mapgen aliases
+
+Games use aliases to tell the core mapgen which nodes to use for world generation. You must set these aliases in your game's mods:
+
+```lua
+-- Tell the mapgen which node is stone
+core.register_alias("mapgen_stone", "default:stone")
+
+-- Tell the mapgen which node is water
+core.register_alias("mapgen_water_source", "default:water_source")
+
+-- Tell the mapgen which node is river water
+core.register_alias("mapgen_river_water_source", "default:river_water_source")
+```
+
+## Summary
+
+| Rule | Detail |
+|---|---|
+| Format | `modname:itemname` |
+| Allowed characters | `a-zA-Z0-9_` in both parts |
+| Override prefix | `:modname:itemname` |
+| Override requirement | The overriding mod must depend on the mod being overridden |
+| Aliases | `core.register_alias` / `core.register_alias_force` |

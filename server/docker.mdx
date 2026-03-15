@@ -1,0 +1,217 @@
+---
+title: "Docker Deployment"
+description: "How to run a Luanti dedicated server using the official Docker image, including volume mounts, port configuration, and a docker-compose example."
+---
+
+Luanti provides official server Docker images through the GitHub Container Registry. You can use these images to run a production-ready dedicated server without compiling from source.
+
+## Available Images
+
+| Tag | Description |
+|---|---|
+| `ghcr.io/luanti-org/luanti:latest` | Latest stable release |
+| `ghcr.io/luanti-org/luanti:master` | Latest commit on the `master` branch |
+| `ghcr.io/luanti-org/luanti:<tag>` | Specific Git tag (e.g., `5.9.0`) |
+
+See the [full list of available tags](https://github.com/luanti-org/luanti/pkgs/container/luanti) on GitHub.
+
+<Info>
+  Versions released before the project was renamed from Minetest are available at `ghcr.io/minetest/minetest` with the same tag scheme.
+</Info>
+
+## Quick Start
+
+For a fast local test:
+
+```bash
+docker run ghcr.io/luanti-org/luanti:master
+```
+
+This starts a server with default settings, but any data it creates is discarded when the container stops.
+
+## Production Deployment
+
+For a persistent production server, bind-mount host directories for world data and configuration:
+
+```bash
+docker create \
+  -v /home/minetest/data/:/var/lib/minetest/ \
+  -v /home/minetest/conf/:/etc/minetest/ \
+  -p 30000:30000/udp \
+  ghcr.io/luanti-org/luanti:master
+```
+
+| Mount point (container) | Purpose |
+|---|---|
+| `/var/lib/minetest/` | World data, player files, mod storage |
+| `/etc/minetest/` | Configuration files |
+
+The container reads configuration from `/etc/minetest/minetest.conf`.
+
+<Note>
+  Data is written to `/home/minetest/data` on the host and configuration is read from `/home/minetest/conf/minetest.conf`.
+</Note>
+
+## Ports
+
+| Port | Protocol | Purpose |
+|---|---|---|
+| `30000` | UDP | Game traffic (required) |
+| `30000` | TCP | Optional media serving |
+
+The Dockerfile exposes both:
+
+```dockerfile
+EXPOSE 30000/udp 30000/tcp
+```
+
+## Docker Compose
+
+For easier management, use Docker Compose:
+
+```yaml
+---
+version: "2"
+services:
+  minetest_server:
+    image: ghcr.io/luanti-org/luanti:master
+    restart: always
+    networks:
+      - default
+    volumes:
+      - /home/minetest/data/:/var/lib/minetest/
+      - /home/minetest/conf/:/etc/minetest/
+    ports:
+      - "30000:30000/udp"
+      - "127.0.0.1:30000:30000/tcp"
+```
+
+Start the stack:
+
+```bash
+docker compose up -d
+```
+
+View logs:
+
+```bash
+docker compose logs -f minetest_server
+```
+
+<Warning>
+  Binding the TCP port to `127.0.0.1` (as shown above) restricts media serving to the local host only. If you expose it publicly, ensure you have appropriate firewall rules.
+</Warning>
+
+## Configuration
+
+Place your `minetest.conf` in the directory mounted to `/etc/minetest/`:
+
+```bash
+mkdir -p /home/minetest/conf
+cat > /home/minetest/conf/minetest.conf <<'EOF'
+server_name = My Luanti Server
+server_description = A great voxel world
+max_users = 20
+default_privs = interact, shout
+motd = Welcome! Read the rules at example.com/rules
+EOF
+```
+
+The container entrypoint passes `--config /etc/minetest/minetest.conf` to `luantiserver` by default.
+
+## The Dockerfile
+
+The official `Dockerfile` uses a multi-stage build on Alpine Linux.
+
+**Stage 1: `dev` — build environment**
+
+Installs all build dependencies and compiles supporting libraries (prometheus-cpp, libspatialindex, LuaJIT):
+
+```dockerfile
+ARG DOCKER_IMAGE=alpine:3.23
+FROM $DOCKER_IMAGE AS dev
+
+ENV LUAJIT_VERSION=v2.1
+
+RUN apk add --no-cache git build-base cmake curl-dev zlib-dev zstd-dev \
+        sqlite-dev postgresql-dev hiredis-dev leveldb-dev \
+        gmp-dev jsoncpp-dev ninja
+```
+
+**Stage 2: `builder` — compile Luanti server**
+
+Copies the source tree and builds the server binary with SQLite, PostgreSQL, Redis, LevelDB, and Prometheus support:
+
+```dockerfile
+FROM dev AS builder
+
+WORKDIR /usr/src/luanti
+RUN cmake -B build \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SERVER=TRUE \
+        -DENABLE_PROMETHEUS=TRUE \
+        -DBUILD_UNITTESTS=FALSE -DBUILD_BENCHMARKS=FALSE \
+        -DBUILD_CLIENT=FALSE \
+        -GNinja && \
+    cmake --build build && \
+    cmake --install build
+```
+
+**Stage 3: `runtime` — minimal production image**
+
+Installs only runtime libraries, creates a dedicated `minetest` user (UID 30000), and copies the compiled binary:
+
+```dockerfile
+FROM $DOCKER_IMAGE AS runtime
+
+RUN apk add --no-cache curl gmp libstdc++ libgcc libpq jsoncpp zstd-libs \
+                sqlite-libs postgresql hiredis leveldb && \
+    adduser -D minetest --uid 30000 -h /var/lib/minetest && \
+    chown -R minetest:minetest /var/lib/minetest
+
+WORKDIR /var/lib/minetest
+
+COPY --from=builder /usr/local/bin/luantiserver /usr/local/bin/luantiserver
+COPY --from=builder /usr/local/share/luanti /usr/local/share/luanti
+
+USER minetest:minetest
+
+EXPOSE 30000/udp 30000/tcp
+VOLUME /var/lib/minetest/ /etc/minetest/
+
+ENTRYPOINT ["/usr/local/bin/luantiserver"]
+CMD ["--config", "/etc/minetest/minetest.conf"]
+```
+
+## Developing with Docker
+
+The `Dockerfile` also exposes a `dev` build target that you can use for local development without installing any build tools on your host machine (beyond git and Docker).
+
+<Steps>
+  <Step title="Build the development image">
+    ```bash
+    docker buildx build --target dev -t minetest-dev:0 .
+    ```
+
+    The `--target dev` flag builds only the intermediate development stage, tagging it as `minetest-dev:0`.
+  </Step>
+  <Step title="Open a development container">
+    Mount your local source tree into the container:
+
+    ```bash
+    docker run -it \
+      --mount type=bind,source=/home/bob/minetest,target=/minetest \
+      minetest-dev:0
+    ```
+
+    The `-it` flag runs an interactive terminal inside the container.
+  </Step>
+  <Step title="Build inside the container">
+    Once inside the container, run cmake and build as normal. All required libraries are pre-installed in the image.
+  </Step>
+</Steps>
+
+### VS Code Dev Containers
+
+If you use VS Code, install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) and attach it to the running container. Extensions must be installed inside the container from the Extensions tab once attached.

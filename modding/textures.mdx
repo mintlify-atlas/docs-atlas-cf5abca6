@@ -1,0 +1,395 @@
+---
+title: "Textures"
+description: "Understand Luanti's texture system — supported formats, loading order, texture modifiers for runtime compositing, animated tiles, and texture pack overrides."
+---
+
+Textures in Luanti are image files that define the visual appearance of nodes, items, entities, and UI elements. The engine sends textures from the server to connected clients, and clients can also override textures with texture packs.
+
+## Supported formats
+
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| PNG | `.png` | Recommended; supports alpha transparency |
+| JPEG | `.jpg` | No transparency support |
+| Targa | `.tga` | Supports alpha |
+
+Luanti uses **nearest-neighbor upscaling** by default to preserve the crisp look of pixel art. Users may enable bilinear/trilinear filtering, but textures smaller than 192 px are either not filtered or upscaled to that size first, so low-resolution textures will not unexpectedly become blurry.
+
+## Naming conventions
+
+Textures are looked up by their filename, with or without the extension:
+
+```
+foomod_foothing.png   →  "foomod_foothing.png"  or  "foomod_foothing"
+```
+
+Always prefix texture names with your mod name to avoid conflicts with other mods:
+
+```
+mymod_wood_planks.png
+mymod_icon_warning.png
+```
+
+## Loading order
+
+Texture names are resolved in the following order (lower items override higher items):
+
+1. `$path_share/textures/base/pack` (lowest priority)
+2. Mod-provided textures in their `textures/` directory
+3. Game textures in `<game path>/textures`
+4. `$path_share/textures/server`
+5. `override.txt` in the `texture_path` setting path
+6. `override.txt` in `<game path>/textures`
+7. `texture_path` setting (client-side)
+8. `override.txt` in the client `texture_path` (highest priority — texture packs)
+
+For full details on texture packs, see the `texture_packs.md` file in the Luanti source.
+
+## Texture modifiers
+
+Texture modifiers allow the engine to **generate composite textures at runtime** without needing separate image files. Modifiers are applied directly in sRGB colorspace (without gamma correction).
+
+### Overlay: `^`
+
+Overlay one texture on top of another:
+
+```
+default_dirt.png^default_grass_side.png
+```
+
+`default_grass_side.png` is rendered over `default_dirt.png`. If both pixels are semi-transparent, this is **not** regular alpha blending and is **not** associative.
+
+<Note>
+The `TEXMOD_UPSCALE` rule applies to modifiers that combine two textures: the lower-resolution texture is automatically upscaled to match the higher-resolution one.
+</Note>
+
+### Grouping: `(` and `)`
+
+Group modifier chains to control the order of operations:
+
+```
+cobble.png^(thing1.png^thing2.png)
+```
+
+First creates `thing1.png^thing2.png`, then overlays the result on `cobble.png`.
+
+### Escaping
+
+Modifiers that accept texture names (e.g. `[combine`) allow escaping with backslash for the special characters `^`, `:`, and `\`:
+
+```
+cobble.png^[lowpart:50:color.png\^[mask\:trans.png
+```
+
+As a Lua string:
+
+```lua
+"cobble.png^[lowpart:50:color.png\\^[mask\\:trans.png"
+```
+
+## Modifier reference
+
+<Accordion title="[combine — composite from multiple sources">
+```
+[combine:<w>x<h>:<x1>,<y1>=<file1>:<x2>,<y2>=<file2>:...
+```
+
+Creates a canvas of size `<w>×<h>` and blits each listed texture at its given coordinates. Coordinates may be negative.
+
+```
+[combine:16x32:0,0=default_cobble.png:0,16=default_wood.png
+```
+</Accordion>
+
+<Accordion title="[resize — scale to exact dimensions">
+```
+[resize:<w>x<h>
+```
+
+Resizes the texture to the given pixel dimensions:
+
+```
+default_sandstone.png^[resize:16x16
+```
+</Accordion>
+
+<Accordion title="[opacity — make semi-transparent">
+```
+[opacity:<r>
+```
+
+`r` ranges from 0 (fully transparent) to 255 (fully opaque):
+
+```
+default_sandstone.png^[opacity:127
+```
+</Accordion>
+
+<Accordion title="[colorize — tint to a color">
+```
+[colorize:<color>:<ratio>
+```
+
+Colorizes the texture with `<color>` (a `ColorString`). `<ratio>` is 0–255 (0 = original color, 255 = pure color) or the word `alpha` to use the color's alpha as the ratio:
+
+```
+default_cobble.png^[colorize:#FF0000:128
+```
+</Accordion>
+
+<Accordion title="[multiply — multiply color channels">
+```
+[multiply:<color>
+```
+
+Multiplies texture colors with the given color. White surfaces pick up the full color; dark areas are less affected:
+
+```
+default_wood.png^[multiply:#804000
+```
+</Accordion>
+
+<Accordion title="[hsl, [colorizehsl — HSL adjustments">
+```
+[hsl:<hue>:<saturation>:<lightness>
+```
+
+Adjusts hue (−180 to +180), saturation, and lightness (both −100 to +100):
+
+```
+default_leaves.png^[hsl:60:0:20
+```
+
+```
+[colorizehsl:<hue>:<saturation>:<lightness>
+```
+
+Converts to greyscale then tints to the given hue, like "Colorize" in GIMP.
+</Accordion>
+
+<Accordion title="[contrast — brightness and contrast">
+```
+[contrast:<contrast>:<brightness>
+```
+
+Both values range from −127 to +127:
+
+```
+default_stone.png^[contrast:40:10
+```
+</Accordion>
+
+<Accordion title="[overlay, [hardlight — blend modes">
+```
+[overlay:<file>
+[hardlight:<file>
+```
+
+Apply Overlay or Hard Light blend modes between two textures (equivalent to the same-named layer modes in GIMP):
+
+```
+textureA.png^[overlay:textureB.png
+```
+
+Hard light and Overlay are related: `A.png^[hardlight:B.png` equals `B.png^[overlay:A.png`.
+</Accordion>
+
+<Accordion title="[invert — invert channels">
+```
+[invert:<mode>
+```
+
+`mode` is any combination of `r`, `g`, `b`, `a`:
+
+```
+default_apple.png^[invert:rgb
+```
+</Accordion>
+
+<Accordion title="[transform — rotate and flip">
+```
+[transform<t>
+```
+
+Rotates or flips the image. `t` can be a number (0–7) or a name. Rotations are counter-clockwise:
+
+| Value | Name | Effect |
+|-------|------|--------|
+| 0 | I | Identity |
+| 1 | R90 | Rotate 90° |
+| 2 | R180 | Rotate 180° |
+| 3 | R270 | Rotate 270° |
+| 4 | FX | Flip X |
+| 5 | FXR90 | Flip X + Rotate 90° |
+| 6 | FY | Flip Y |
+| 7 | FYR90 | Flip Y + Rotate 90° |
+
+```
+default_stone.png^[transformFXR90
+```
+</Accordion>
+
+<Accordion title="[fill — solid color rectangle">
+```
+[fill:<w>x<h>:<x>,<y>:<color>
+```
+
+Creates a solid color rectangle. The `<x>,<y>` position is only used when overlaying on another texture:
+
+```
+[fill:16x16:#20F02080
+texture.png^[fill:8x8:4,4:red
+```
+</Accordion>
+
+<Accordion title="[mask — binary AND mask">
+```
+[mask:<file>
+```
+
+Applies a mask using binary AND. Useful for cutting shapes from textures.
+</Accordion>
+
+<Accordion title="[sheet — extract frame from spritesheet">
+```
+[sheet:<w>x<h>:<x>,<y>
+```
+
+Retrieves a tile at position `(x, y)` (0-indexed, in tiles) from a tilesheet with `w×h` tiles:
+
+```
+mymod_icons.png^[sheet:4x4:2,1
+```
+</Accordion>
+
+<Accordion title="[verticalframe — extract animation frame">
+```
+[verticalframe:<t>:<n>
+```
+
+Crops the texture to frame `n` of a vertical animation strip with `t` total frames:
+
+```
+default_torch_animated.png^[verticalframe:16:8
+```
+</Accordion>
+
+<Accordion title="[lowpart — blit lower portion">
+```
+[lowpart:<percent>:<file>
+```
+
+Blits the lower `percent`% of `<file>` onto the base texture:
+
+```
+base.png^[lowpart:25:overlay.png
+```
+</Accordion>
+
+<Accordion title="[inventorycube — 3D cube preview">
+```
+[inventorycube{<top>{<left>{<right>
+```
+
+Creates an isometric inventory cube. Use `&` instead of `^` within the texture names (no escaping here):
+
+```
+[inventorycube{grass.png{dirt.png&grass_side.png{dirt.png&grass_side.png
+```
+</Accordion>
+
+<Accordion title="[png — embed base64 PNG">
+```
+[png:<base64>
+```
+
+Embeds a base64-encoded PNG directly in the texture string. Generate the string with:
+
+```lua
+core.encode_base64(core.encode_png(pixel_data))
+```
+
+Use this only for disposable textures (e.g. per-player captchas). Do **not** use it as a replacement for asset files — prefer `core.dynamic_add_media` for reusable images.
+</Accordion>
+
+## Tile animation definition
+
+To animate a texture tile on a node, provide a `tile animation definition` in the node's tile table:
+
+<Tabs>
+  <Tab title="vertical_frames">
+    The texture is a vertical strip where each frame has the same width as the texture and height of `aspect_h` pixels.
+
+    ```lua
+    tiles = {
+        {
+            name = "default_torch_animated.png",
+            animation = {
+                type     = "vertical_frames",
+                aspect_w = 16,  -- frame width in pixels
+                aspect_h = 16,  -- frame height in pixels
+                length   = 1.0, -- full loop duration in seconds
+            },
+        },
+    }
+    ```
+  </Tab>
+  <Tab title="sheet_2d">
+    The texture is a 2D spritesheet with `frames_w × frames_h` frames.
+
+    ```lua
+    tiles = {
+        {
+            name = "mymod_explosion_sheet.png",
+            animation = {
+                type         = "sheet_2d",
+                frames_w     = 5,   -- columns
+                frames_h     = 3,   -- rows
+                frame_length = 0.1, -- seconds per frame
+            },
+        },
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Hardware coloring
+
+Instead of creating separate texture files for each color variant of a node, you can use hardware coloring. White areas receive the full color; dark areas are less affected.
+
+### Static color (global)
+
+```lua
+core.register_node("mymod:colored_wool", {
+    description = "Blue Wool",
+    tiles = {"wool_white.png"},
+    color = "#5555FF",  -- ColorSpec applied to all faces
+})
+```
+
+### Palette-based coloring
+
+Store a color index in `param2` and provide a palette image:
+
+```lua
+core.register_node("mymod:wool", {
+    description = "Wool",
+    tiles = {"wool_white.png"},
+    paramtype2 = "color",
+    palette    = "mymod_wool_palette.png",  -- 256×1 or 16×16 palette image
+    color      = "white",  -- fallback for clients without palette support
+})
+```
+
+## Texture packs
+
+Texture packs replace any texture by providing a file with the same name in the pack's directory. The texture pack path (set via the `texture_path` setting or the in-game menu) has the highest lookup priority, so it overrides all mod and game textures.
+
+An `override.txt` file inside a texture pack can redirect texture names:
+
+```
+# override.txt
+default_stone.png mypack_stone.png
+```
+
+See `texture_packs.md` in the Luanti source documentation for the full format specification.

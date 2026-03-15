@@ -1,0 +1,840 @@
+---
+title: "Client-Side Functions"
+description: "Complete reference for all functions available in the Luanti client-side (CSM) Lua API, including chat, map queries, player state, UI, sounds, and utilities."
+---
+
+All functions live in the `core` namespace (aliased as `minetest` for backwards compatibility).
+
+---
+
+## Chat and Messaging
+
+### `core.display_chat_message`
+
+```lua
+core.display_chat_message(message)
+```
+
+Shows a chat message to the local player only. The message is not sent to the server.
+
+<ParamField body="message" type="string">
+  The message text to display locally.
+</ParamField>
+
+Returns `true` on success.
+
+```lua
+core.display_chat_message("Hello, local player!")
+```
+
+---
+
+### `core.send_chat_message`
+
+```lua
+core.send_chat_message(message)
+```
+
+Acts as if `message` was typed by the player into the chat terminal. The message is sent to the server.
+
+<ParamField body="message" type="string">
+  The message or command to send to the server.
+</ParamField>
+
+---
+
+### `core.run_server_chatcommand`
+
+```lua
+core.run_server_chatcommand(cmd, param)
+```
+
+Alias for `core.send_chat_message("/" .. cmd .. " " .. param)`. Sends a server command on behalf of the player.
+
+<ParamField body="cmd" type="string">
+  The command name (without the leading `/`).
+</ParamField>
+
+<ParamField body="param" type="string">
+  The parameters to pass to the command.
+</ParamField>
+
+---
+
+### `core.clear_out_chat_queue`
+
+```lua
+core.clear_out_chat_queue()
+```
+
+Clears the outgoing chat queue, discarding any messages waiting to be sent to the server.
+
+---
+
+## Player Environment
+
+### `core.get_player_names`
+
+```lua
+core.get_player_names()
+```
+
+Returns a list of player names currently on the server.
+
+Returns `nil` if the server has set the `CSM_RF_READ_PLAYERINFO` restriction flag.
+
+```lua
+local names = core.get_player_names()
+if names then
+    for _, name in ipairs(names) do
+        core.display_chat_message(name)
+    end
+end
+```
+
+---
+
+### `core.disconnect`
+
+```lua
+core.disconnect()
+```
+
+Disconnects from the server and returns to the main menu.
+
+Returns `false` if the client is already in the process of disconnecting, otherwise returns `true`.
+
+---
+
+### `core.get_server_info`
+
+```lua
+core.get_server_info()
+```
+
+Returns a table with information about the connected server:
+
+```lua
+{
+    address = "luanti.example.org",  -- domain name or IP, "" for local server
+    ip      = "203.0.113.156",       -- resolved IP address
+    port    = 30000,                  -- port number
+    protocol_version = 30,           -- 0 if not yet connected
+}
+```
+
+---
+
+### `core.localplayer`
+
+A reference to the `LocalPlayer` object. Available after the client is fully initialized; `nil` before that.
+
+See the [LocalPlayer class](#localplayer-class) section below for all methods.
+
+---
+
+## Privileges
+
+### `core.get_privilege_list`
+
+```lua
+core.get_privilege_list()
+```
+
+Returns the current player's privileges as a table:
+
+```lua
+{ interact = true, shout = true, ... }
+```
+
+---
+
+### `core.string_to_privs`
+
+```lua
+core.string_to_privs(str)
+```
+
+Converts a privilege string (`"priv1,priv2"`) to a table (`{priv1=true, priv2=true}`).
+
+---
+
+### `core.privs_to_string`
+
+```lua
+core.privs_to_string(privs)
+```
+
+Converts a privilege table (`{priv1=true, priv2=true}`) to a string (`"priv1,priv2"`).
+
+---
+
+## UI
+
+### `core.show_formspec`
+
+```lua
+core.show_formspec(formname, formspec)
+```
+
+Shows a formspec dialog to the local player.
+
+<ParamField body="formname" type="string">
+  A unique name identifying this formspec instance. Used to match fields in `register_on_formspec_input`.
+</ParamField>
+
+<ParamField body="formspec" type="string">
+  The formspec definition string. Refer to `lua_api.md` for formspec language syntax.
+</ParamField>
+
+Returns `true` on success.
+
+```lua
+core.show_formspec("mymod:dialog", "formspec_version[4]size[8,4]" ..
+    "label[0.5,0.5;Hello from CSM!]" ..
+    "button_exit[3,3;2,0.8;ok;OK]")
+```
+
+---
+
+### `core.ui.minimap`
+
+A reference to the `Minimap` object. `nil` if the player has disabled the minimap via the `enable_minimap` setting.
+
+<Accordion title="Minimap methods">
+
+| Method | Description |
+|---|---|
+| `show()` | Show the minimap (if not server-disabled) |
+| `hide()` | Hide the minimap |
+| `set_pos(pos)` | Set minimap position on screen |
+| `get_pos()` | Return current minimap screen position |
+| `set_angle(deg)` | Set minimap rotation angle in degrees |
+| `get_angle()` | Return current angle in degrees |
+| `set_mode(mode)` | Set minimap mode (0 to 6) |
+| `get_mode()` | Return current minimap mode |
+| `set_shape(shape)` | Set shape: `0` = square, `1` = round |
+| `get_shape()` | Return current shape |
+
+</Accordion>
+
+---
+
+### `core.camera`
+
+A reference to the `Camera` object. Do not access before the camera is initialized.
+
+<Accordion title="Camera methods">
+
+| Method | Returns | Description |
+|---|---|---|
+| `set_camera_mode(mode)` | — | `0`=first-person, `1`=third-person, `2`=third-person front |
+| `get_camera_mode()` | `number` | Current camera mode |
+| `get_fov()` | `table` | `{x, y, max, actual}` FOV values in degrees |
+| `get_pos()` | `vector` | Camera position including view bobbing |
+| `get_offset()` | `vector` | Eye offset vector |
+| `get_look_dir()` | `vector` | Eye direction unit vector |
+| `get_look_vertical()` | `number` | Pitch in radians |
+| `get_look_horizontal()` | `number` | Yaw in radians |
+| `get_aspect_ratio()` | `number` | Screen aspect ratio |
+
+</Accordion>
+
+---
+
+## Map Queries
+
+### `core.get_node_or_nil`
+
+```lua
+core.get_node_or_nil(pos)
+```
+
+Returns the node at the given position.
+
+<ParamField body="pos" type="table">
+  `{x=number, y=number, z=number}`
+</ParamField>
+
+Returns `{name=string, param1=number, param2=number}`, or `nil` for unloaded areas or restriction-limited areas.
+
+---
+
+### `core.get_node_light`
+
+```lua
+core.get_node_light(pos, timeofday)
+```
+
+Gets the light level inside the node at the given position. You usually want to query a neighboring node.
+
+<ParamField body="pos" type="table">
+  Position to measure: `{x=number, y=number, z=number}`.
+</ParamField>
+
+<ParamField body="timeofday" type="number | nil">
+  `nil` for current time, `0` for night, `0.5` for day.
+</ParamField>
+
+Returns a number between `0` and `15`, or `nil`.
+
+---
+
+### `core.find_node_near`
+
+```lua
+core.find_node_near(pos, radius, nodenames, [search_center])
+```
+
+Finds a node of the given type(s) near `pos`.
+
+<ParamField body="pos" type="table">
+  Center position to search from.
+</ParamField>
+
+<ParamField body="radius" type="number">
+  Search radius using a maximum (Chebyshev) metric.
+</ParamField>
+
+<ParamField body="nodenames" type="string | table">
+  Node name or list of names/groups to match, e.g. `"default:dirt"` or `{"ignore", "group:tree"}`.
+</ParamField>
+
+<ParamField body="search_center" type="boolean">
+  Optional. If `true`, also checks `pos` itself. Default: `false`.
+</ParamField>
+
+Returns a position, or `nil` if nothing found.
+
+---
+
+### `core.find_nodes_in_area`
+
+```lua
+core.find_nodes_in_area(pos1, pos2, nodenames, [grouped])
+```
+
+Finds all nodes of the given type(s) within a rectangular area. Area volume is limited to 4,096,000 nodes.
+
+<ParamField body="pos1" type="table">
+  Minimum corner of the search area.
+</ParamField>
+
+<ParamField body="pos2" type="table">
+  Maximum corner of the search area.
+</ParamField>
+
+<ParamField body="nodenames" type="string | table">
+  Node name or list of names/groups to match.
+</ParamField>
+
+<ParamField body="grouped" type="boolean">
+  Optional. If `true`, returns a table indexed by node name containing lists of positions. If `false` or absent, returns a flat position table and a count table.
+</ParamField>
+
+---
+
+### `core.find_nodes_in_area_under_air`
+
+```lua
+core.find_nodes_in_area_under_air(pos1, pos2, nodenames)
+```
+
+Like `find_nodes_in_area`, but only returns positions where the node directly above is `air`. Area volume is limited to 4,096,000 nodes.
+
+Returns a table of positions.
+
+---
+
+### `core.line_of_sight`
+
+```lua
+core.line_of_sight(pos1, pos2)
+```
+
+Checks whether there is an unobstructed line of sight between two positions.
+
+<ParamField body="pos1" type="table">
+  Start position.
+</ParamField>
+
+<ParamField body="pos2" type="table">
+  End position.
+</ParamField>
+
+Returns `boolean, pos`. If something blocks the sightline, returns `false` and the position of the blocking node.
+
+---
+
+### `core.raycast`
+
+```lua
+core.raycast(pos1, pos2, objects, liquids)
+```
+
+Creates a `Raycast` object that can be iterated to find what the ray intersects.
+
+<ParamField body="pos1" type="table">
+  Start of the ray.
+</ParamField>
+
+<ParamField body="pos2" type="table">
+  End of the ray.
+</ParamField>
+
+<ParamField body="objects" type="boolean">
+  If `false`, only nodes are returned. Default: `true`.
+</ParamField>
+
+<ParamField body="liquids" type="boolean">
+  If `false`, liquid nodes are excluded. Default: `false`.
+</ParamField>
+
+Returns a `Raycast` object. Use it as an iterator:
+
+```lua
+for pointed_thing in core.raycast(pos1, pos2, false, false) do
+    if pointed_thing.type == "node" then
+        core.display_chat_message("Hit node at " .. core.pos_to_string(pointed_thing.under))
+    end
+end
+```
+
+---
+
+### `core.get_meta`
+
+```lua
+core.get_meta(pos)
+```
+
+Returns a `NodeMetaRef` at the given position. The ref exposes `get_string(name)`, `get_int(name)`, `get_float(name)`, and `to_table()`.
+
+---
+
+### `core.find_nodes_with_meta`
+
+```lua
+core.find_nodes_with_meta(pos1, pos2)
+```
+
+Returns a table of positions of nodes that have metadata within the given region.
+
+---
+
+### `core.get_node_level` / `core.get_node_max_level`
+
+```lua
+core.get_node_level(pos)
+core.get_node_max_level(pos)
+```
+
+Get the current and maximum fill level for leveled nodes (water, snow, etc.).
+
+---
+
+## Definitions
+
+### `core.get_item_def`
+
+```lua
+core.get_item_def(itemstring)
+```
+
+Returns the item definition table for `itemstring`, or `nil` if restricted or unknown.
+
+<Accordion title="Item definition fields">
+
+```lua
+{
+    name                      = string,   -- e.g. "default:stone"
+    description               = string,   -- e.g. "Stone"
+    type                      = string,   -- "none", "node", "craftitem", or "tool"
+    inventory_image           = string,
+    wield_image               = string,
+    palette_image             = string,
+    color                     = Color,
+    wield_scale               = Vector,
+    stack_max                 = number,
+    usable                    = bool,
+    liquids_pointable         = bool,
+    tool_capabilities         = table,    -- only for tools
+    groups                    = table,
+    sound_place               = SimpleSoundSpec,
+    sound_place_failed        = SimpleSoundSpec,
+    node_placement_prediction = string,
+}
+```
+
+</Accordion>
+
+---
+
+### `core.get_node_def`
+
+```lua
+core.get_node_def(nodename)
+```
+
+Returns the node definition table for `nodename`, or `nil` if restricted or unknown.
+
+<Accordion title="Node definition fields">
+
+```lua
+{
+    has_on_construct          = bool,
+    has_on_destruct           = bool,
+    has_after_destruct        = bool,
+    name                      = string,
+    groups                    = table,
+    paramtype                 = string,
+    paramtype2                = string,
+    drawtype                  = string,
+    mesh                      = string,   -- may be nil
+    minimap_color             = Color,    -- may be nil
+    visual_scale              = number,
+    alpha                     = number,
+    color                     = Color,    -- may be nil
+    palette_name              = string,   -- may be nil
+    waving                    = number,
+    connect_sides             = number,
+    connects_to               = table,
+    post_effect_color         = Color,
+    leveled                   = number,
+    sunlight_propogates       = bool,
+    light_source              = number,
+    is_ground_content         = bool,
+    walkable                  = bool,
+    pointable                 = bool,
+    diggable                  = bool,
+    climbable                 = bool,
+    buildable_to              = bool,
+    rightclickable            = bool,
+    damage_per_second         = number,
+    liquid_type               = string,   -- may be nil
+    liquid_alternative_flowing= string,   -- may be nil
+    liquid_alternative_source = string,   -- may be nil
+    liquid_viscosity          = number,   -- may be nil
+    liquid_renewable          = boolean,  -- may be nil
+    liquid_range              = number,   -- may be nil
+    drowning                  = bool,
+    floodable                 = bool,
+    node_box                  = table,
+    collision_box             = table,
+    selection_box             = table,
+    sounds                    = { sound_footstep, sound_dig, sound_dug },
+    legacy_facedir_simple     = bool,
+    legacy_wallmounted        = bool,
+    move_resistance           = number,   -- may be nil
+}
+```
+
+</Accordion>
+
+---
+
+## Sounds
+
+### `core.sound_play`
+
+```lua
+core.sound_play(spec, parameters)
+```
+
+Plays a sound. Returns a handle.
+
+<ParamField body="spec" type="SimpleSoundSpec">
+  A sound name string, empty string, or table:
+  - `"default_place_node"`
+  - `{name = "default_place_node", gain = 1.0}`
+</ParamField>
+
+<ParamField body="parameters" type="table">
+  Sound parameter table:
+
+  ```lua
+  -- Locationless
+  { gain = 1.0 }
+
+  -- Locationless, looped
+  { gain = 1.0, loop = true }
+
+  -- Positional (mono files only)
+  { pos = {x=1, y=2, z=3}, gain = 1.0 }
+  ```
+
+  Looped sounds must be played locationless.
+</ParamField>
+
+```lua
+local handle = core.sound_play("default_dig_stone", {gain = 0.8})
+```
+
+---
+
+### `core.sound_stop` / `handle:stop`
+
+```lua
+core.sound_stop(handle)
+handle:stop()
+```
+
+Stops a sound started with `core.sound_play`.
+
+---
+
+### `core.sound_fade` / `handle:fade`
+
+```lua
+core.sound_fade(handle, step, gain)
+handle:fade(step, gain)
+```
+
+<ParamField body="step" type="number">
+  Fade speed. Negative values fade out; positive values fade in.
+</ParamField>
+
+<ParamField body="gain" type="number">
+  Target volume gain.
+</ParamField>
+
+---
+
+## Timing
+
+### `core.after`
+
+```lua
+core.after(time, func, ...)
+```
+
+Calls `func` after `time` seconds (fractional values allowed). Additional arguments are passed through to `func`.
+
+```lua
+core.after(5.0, function()
+    core.display_chat_message("5 seconds have passed")
+end)
+```
+
+---
+
+### `core.get_us_time`
+
+```lua
+core.get_us_time()
+```
+
+Returns the current time with microsecond precision. May not be wall-clock time.
+
+---
+
+### `core.get_timeofday`
+
+```lua
+core.get_timeofday()
+```
+
+Returns the in-game time of day: `0` for midnight, `0.5` for midday.
+
+---
+
+## Mod Channels
+
+### `core.mod_channel_join`
+
+```lua
+core.mod_channel_join(channel_name)
+```
+
+Joins (and creates, if necessary) a mod channel. This is asynchronous — listen for `core.register_on_modchannel_signal` with signal `0` (join_ok) before sending messages.
+
+<ParamField body="channel_name" type="string">
+  The channel name to join.
+</ParamField>
+
+Returns a `ModChannel` object with methods:
+- `leave()` — leave the channel
+- `is_writeable()` — returns `true` if the channel can be written to
+- `send_all(message)` — broadcast a message (max 65535 characters)
+
+---
+
+## Particles
+
+### `core.add_particle`
+
+```lua
+core.add_particle(particle_definition)
+```
+
+Adds a single particle. See `lua_api.md` for the particle definition format. Note: the `playername` field is not supported in CSMs.
+
+---
+
+### `core.add_particlespawner`
+
+```lua
+core.add_particlespawner(particlespawner_definition)
+```
+
+Adds a particle spawner that emits particles over time. Returns an `id`, or `-1` on failure.
+
+---
+
+### `core.delete_particlespawner`
+
+```lua
+core.delete_particlespawner(id)
+```
+
+Deletes the particle spawner with the given `id`.
+
+---
+
+## Storage
+
+### `core.get_mod_storage`
+
+```lua
+core.get_mod_storage()
+```
+
+Returns a reference to the mod's private `StorageRef`. **Must be called at load time** (during `init.lua` execution).
+
+```lua
+local storage = core.get_mod_storage()
+storage:set("key", "value")
+local val = storage:get("key")
+```
+
+---
+
+## Settings
+
+### `core.settings`
+
+A `Settings` object containing all settings from `minetest.conf`.
+
+```lua
+local hud_scale = core.settings:get("hud_scaling")
+```
+
+---
+
+### `core.setting_get_pos`
+
+```lua
+core.setting_get_pos(name)
+```
+
+Loads a setting from main config and parses it as a position in the format `(1,2,3)`. Returns a position table or `nil`.
+
+---
+
+## Serialization and Encoding
+
+<Accordion title="JSON, serialization, and encoding functions">
+
+| Function | Description |
+|---|---|
+| `core.parse_json(string [, nullvalue])` | Parse a JSON string to a Lua value. Returns `nil` on failure. |
+| `core.write_json(data [, styled])` | Convert a Lua table to a JSON string. |
+| `core.serialize(table)` | Serialize a table to a string readable by `core.deserialize`. |
+| `core.deserialize(string)` | Deserialize a string from `core.serialize`. |
+| `core.compress(data, method, ...)` | Compress data. Methods: `"deflate"`, `"zstd"`. |
+| `core.decompress(data, method, ...)` | Decompress data. |
+| `core.encode_base64(string)` | Encode a string in base64. |
+| `core.decode_base64(string)` | Decode a base64 string. Returns `nil` on failure. |
+| `core.urlencode(str)` | Percent-encode non-unreserved URI characters (RFC 3986 §2.3). |
+| `core.sha1(data [, raw])` | Return the SHA-1 hash. `raw=true` returns raw bytes. |
+
+</Accordion>
+
+---
+
+## Color and Escape Sequences
+
+<Accordion title="Color and text formatting functions">
+
+| Function | Description |
+|---|---|
+| `core.colorspec_to_colorstring(colorspec)` | Convert a ColorSpec to a ColorString, or `nil` if invalid. |
+| `core.rgba(r, g, b [, a])` | Return a ColorString from 8-bit RGBA values, e.g. `"#0A141E28"`. |
+| `core.colorize(color, message)` | Wrap message in color escape sequences. |
+| `core.get_color_escape_sequence(color)` | Escape sequence that sets text color. |
+| `core.get_background_escape_sequence(color)` | Escape sequence that sets text background. |
+| `core.strip_foreground_colors(str)` | Remove foreground color escape sequences. |
+| `core.strip_background_colors(str)` | Remove background color escape sequences. |
+| `core.strip_colors(str)` | Remove all color escape sequences. |
+
+</Accordion>
+
+---
+
+## Utilities
+
+<Accordion title="Utility and helper functions">
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.get_version()` | `table` | `{project, string, hash}` — informational only. |
+| `core.get_language()` | `string, string` | Current gettext locale and language code. |
+| `core.get_csm_restrictions()` | `table` | Restriction flags applied to this mod. |
+| `core.is_yes(arg)` | `boolean` | Whether `arg` can be interpreted as yes. |
+| `core.is_nan(arg)` | `boolean` | Whether `arg` represents NaN. |
+| `core.global_exists(name)` | `boolean` | Check if a global variable is set without triggering a warning. |
+| `core.wrap_text(str, limit)` | `string` | Add newlines to keep text within `limit` characters per line. |
+| `core.pos_to_string(pos [, decimal_places])` | `string` | Format a position as `"(X,Y,Z)"`. |
+| `core.string_to_pos(string)` | `pos \| nil` | Parse a position string. |
+| `core.string_to_area(string)` | `pos, pos` | Parse an area string like `"(X1,Y1,Z1) (X2,Y2,Z2)"`. |
+| `core.pointed_thing_to_face_pos(placer, pointed_thing)` | `pos` | Exact surface position on a pointed node. |
+| `core.gettext(string)` | `string` | Look up a translation in the gettext catalog. |
+| `core.log([level,] text)` | — | Log a message. Level: `"none"`, `"error"`, `"warning"`, `"action"`, `"info"`, `"verbose"`. |
+| `core.debug(...)` | — | Equivalent to `core.log(table.concat({...}, "\t"))`. |
+| `dump(obj)` | `string` | Serialize any object to a string. |
+| `table.copy(table)` | `table` | Deep-copy a table. |
+
+</Accordion>
+
+---
+
+## LocalPlayer Class
+
+Access the local player via `core.localplayer`. This object is `nil` until the client is fully initialized.
+
+<Accordion title="LocalPlayer methods">
+
+| Method | Returns | Description |
+|---|---|---|
+| `get_pos()` | `vector` | Current player position |
+| `get_velocity()` | `vector` | Player velocity vector |
+| `get_hp()` | `number` | Player HP |
+| `get_name()` | `string` | Player name |
+| `get_wield_index()` | `number` | Index of the wielded item |
+| `get_wielded_item()` | `ItemStack` | The item currently held |
+| `is_attached()` | `boolean` | True if attached to an object |
+| `is_touching_ground()` | `boolean` | True if touching ground |
+| `is_in_liquid()` | `boolean` | True if in a liquid (oscillates near surface) |
+| `is_in_liquid_stable()` | `boolean` | True if stably in a liquid |
+| `get_move_resistance()` | `number` | Move resistance of current node |
+| `is_climbing()` | `boolean` | True if climbing |
+| `swimming_vertical()` | `boolean` | True if swimming vertically |
+| `get_physics_override()` | `table` | Physics multipliers: speed, jump, gravity, etc. |
+| `get_override_pos()` | `vector` | Override position |
+| `get_last_pos()` | `vector` | Position in the previous client step |
+| `get_last_velocity()` | `vector` | Velocity in the previous client step |
+| `get_breath()` | `number` | Breath level |
+| `get_movement_acceleration()` | `table` | `{fast, air, default}` |
+| `get_movement_speed()` | `table` | `{walk, jump, crouch, fast, climb}` |
+| `get_movement()` | `table` | `{liquid_fluidity, liquid_sink, liquid_fluidity_smooth, gravity}` |
+| `get_last_look_horizontal()` | `number` | Last yaw angle |
+| `get_last_look_vertical()` | `number` | Last pitch angle |
+| `get_control()` | `table` | Pressed controls: `{up, down, left, right, jump, aux1, sneak, zoom, dig, place}` |
+| `get_armor_groups()` | `table` | Armor group ratings |
+| `hud_add(definition)` | `id \| nil` | Add a HUD element |
+| `hud_get(id)` | `table \| nil` | Get a HUD element definition |
+| `hud_get_all()` | `table` | All HUD element definitions keyed by ID |
+| `hud_remove(id)` | `boolean` | Remove a HUD element |
+| `hud_change(id, stat, value)` | `boolean \| nil` | Change a HUD element property |
+
+</Accordion>

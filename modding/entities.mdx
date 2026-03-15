@@ -1,0 +1,391 @@
+---
+title: "Entities"
+description: "How to define and manage Luanti entities: object properties, entity lifecycle callbacks, the ObjectRef API, and the Server Active Object system."
+---
+
+Entities (also called Lua entities or luaentities) are dynamic, Lua-controlled objects in the game world. Unlike nodes, they can move, animate, and execute per-step logic. Players are also objects but are handled by the engine.
+
+## The Server Active Object system
+
+When an entity is active (its containing mapblock is loaded), it lives in memory as a `ServerActiveObject` (SAO). The engine exposes this to Lua as an `ObjectRef`. Every luaentity has a member `self.object` that is its `ObjectRef`.
+
+```
+Lua entity table (luaentity)
+  └─ self.object  --> ObjectRef  --> ServerActiveObject (C++)
+```
+
+ObjectRefs can become invalid if the entity is removed or the mapblock is unloaded. Always check `obj:is_valid()` before using a stored reference.
+
+## Registering an entity
+
+```lua
+core.register_entity("mymod:firefly", {
+    -- Object properties applied once when the entity spawns
+    initial_properties = {
+        visual = "sprite",
+        textures = {"mymod_firefly.png"},
+        physical = true,
+        collisionbox = {-0.1, -0.1, -0.1, 0.1, 0.1, 0.1},
+        visual_size = {x = 0.2, y = 0.2},
+        makes_footstep_sound = false,
+        glow = 10,
+        nametag = "Firefly",
+        static_save = true,  -- persists when mapblock is unloaded
+    },
+
+    -- Custom member variables (prefix with _ by convention)
+    _time_alive = 0,
+    _direction = {x = 1, y = 0, z = 0},
+
+    on_activate = function(self, staticdata, dtime_s)
+        -- Called when entity is instantiated (spawned or mapblock loaded)
+        -- staticdata: string from get_staticdata() if previously saved
+        -- dtime_s: time since entity was last active (0 for new entities)
+        if staticdata ~= "" then
+            local data = core.deserialize(staticdata)
+            self._time_alive = data and data.time_alive or 0
+        end
+        self.object:set_velocity({x = 0.5, y = 0, z = 0})
+    end,
+
+    on_step = function(self, dtime, moveresult)
+        -- Called every server step (~0.1 seconds)
+        self._time_alive = self._time_alive + dtime
+
+        -- Remove after 60 seconds
+        if self._time_alive > 60 then
+            self.object:remove()
+            return
+        end
+
+        -- Bounce when touching ground
+        if moveresult and moveresult.touching_ground then
+            local vel = self.object:get_velocity()
+            self.object:set_velocity({x = vel.x, y = 3, z = vel.z})
+        end
+    end,
+
+    on_death = function(self, killer)
+        -- Called when HP drops to zero
+        -- killer: ObjectRef or nil
+        core.add_particlespawner({
+            pos = self.object:get_pos(),
+            amount = 20,
+            time = 0.5,
+            size = 2,
+            texture = "mymod_spark.png",
+        })
+    end,
+
+    on_punch = function(self, puncher, time_from_last_punch, tool_capabilities, dir, damage)
+        -- Return true to prevent default damage mechanism
+        core.log("info", "Firefly was punched!")
+    end,
+
+    on_rightclick = function(self, clicker)
+        -- clicker: ObjectRef (may or may not be a player)
+        if clicker and clicker:is_player() then
+            core.chat_send_player(clicker:get_player_name(), "You caught a firefly!")
+            self.object:remove()
+        end
+    end,
+
+    get_staticdata = function(self)
+        -- Return a string to save with the entity
+        -- Passed to on_activate when re-activated after mapblock reload
+        return core.serialize({time_alive = self._time_alive})
+    end,
+})
+```
+
+## Object properties (initial_properties)
+
+Object properties control the appearance and physics of an entity. Set them in `initial_properties` or update them at runtime with `self.object:set_properties({...})`.
+
+<Accordion title="Physics properties">
+| Field | Default | Description |
+|-------|---------|-------------|
+| `physical` | `false` | Enable collision with walkable nodes |
+| `collide_with_objects` | `true` | Collide with other physical objects |
+| `collisionbox` | `{-0.5,-0.5,-0.5, 0.5,0.5,0.5}` | Collision AABB |
+| `selectionbox` | copies collisionbox | Pointer selection box |
+| `stepheight` | `0` | How high the entity can step over nodes |
+| `hp_max` | `10` | Maximum hit points |
+| `static_save` | `true` | Persist to disk when unloaded |
+</Accordion>
+
+<Accordion title="Visual properties">
+| Field | Default | Description |
+|-------|---------|-------------|
+| `visual` | `""` | `"sprite"`, `"upright_sprite"`, `"cube"`, `"mesh"`, `"wielditem"`, `"node"` |
+| `visual_size` | `{x=1,y=1,z=1}` | Scale multiplier |
+| `textures` | `{}` | Texture list; count depends on visual type |
+| `mesh` | `""` | Model filename for `"mesh"` visual |
+| `is_visible` | `true` | Whether the entity renders |
+| `glow` | `0` | Extra lighting (negative disables light shading) |
+| `nametag` | `""` | Text label above entity |
+| `automatic_rotate` | `0` | Radians/second auto-rotation around Y axis |
+| `automatic_face_movement_dir` | `0.0` | Auto-yaw to match velocity direction |
+</Accordion>
+
+```lua
+-- Mesh entity example
+core.register_entity("mymod:arrow", {
+    initial_properties = {
+        visual = "mesh",
+        mesh = "mymod_arrow.obj",
+        textures = {"mymod_arrow.png"},
+        physical = true,
+        collisionbox = {-0.1, -0.1, -0.5, 0.1, 0.1, 0.5},
+        visual_size = {x = 0.5, y = 0.5, z = 0.5},
+        automatic_face_movement_dir = 0.0,
+        static_save = false,  -- arrows don't need to persist
+    },
+})
+```
+
+## Spawning entities
+
+```lua
+-- Spawn an entity at a position
+-- Returns ObjectRef or nil on failure
+local obj = core.add_entity(pos, "mymod:firefly")
+
+-- Spawn with initial staticdata (passed to on_activate)
+local obj = core.add_entity(pos, "mymod:firefly", core.serialize({color="blue"}))
+
+if obj then
+    -- Immediately set properties on the new entity
+    obj:set_velocity({x = 0, y = 5, z = 0})
+    obj:set_armor_groups({fleshy = 100})
+end
+
+-- Spawn a dropped item entity
+local item_obj = core.add_item(pos, "default:stone 5")
+```
+
+## ObjectRef methods
+
+Every entity and player is an `ObjectRef`. These methods work on all objects:
+
+<Tabs>
+  <Tab title="Position & movement">
+    ```lua
+    -- Get/set position
+    local pos = obj:get_pos()         -- {x=num, y=num, z=num}
+    obj:set_pos({x=0, y=10, z=0})     -- teleport
+    obj:add_pos({x=0, y=1, z=0})      -- relative move (avoids sync issues)
+    obj:move_to(pos, continuous)      -- smooth interpolated move for entities
+
+    -- Velocity (entities only)
+    local vel = obj:get_velocity()    -- {x=num, y=num, z=num}
+    obj:set_velocity({x=1, y=0, z=0}) -- entities only (not players)
+    obj:add_velocity({x=0, y=6.5, z=0}) -- works on both
+
+    -- Acceleration (entities only)
+    local acc = obj:get_acceleration()
+    obj:set_acceleration({x=0, y=-9.8, z=0})  -- gravity
+
+    -- Rotation (entities only)
+    obj:set_rotation({x=0, y=math.pi/2, z=0}) -- radians, Z-X-Y order
+    local rot = obj:get_rotation()
+    obj:set_yaw(math.pi)  -- heading only, resets pitch/roll
+    local yaw = obj:get_yaw()
+    ```
+  </Tab>
+  <Tab title="Health & armor">
+    ```lua
+    -- HP
+    local hp = obj:get_hp()
+    obj:set_hp(10)             -- 0 kills the entity
+    obj:set_hp(10, {
+        type = "punch",
+        object = attacker,
+    })
+
+    -- Armor groups (for damage calculation)
+    local groups = obj:get_armor_groups()
+    -- e.g. {fleshy=100}
+    obj:set_armor_groups({fleshy = 50, immortal = 1})
+    -- immortal=1 disables all damage and HP-related HUD elements
+    ```
+  </Tab>
+  <Tab title="Inventory & items">
+    ```lua
+    -- Inventory (players only)
+    local inv = obj:get_inventory()   -- InvRef
+
+    -- Wielded item
+    local wield = obj:get_wielded_item()  -- ItemStack
+    obj:set_wielded_item(ItemStack("default:pick_stone"))
+    local wield_list  = obj:get_wield_list()   -- e.g. "main"
+    local wield_index = obj:get_wield_index()  -- 1-based
+    ```
+  </Tab>
+  <Tab title="Visual">
+    ```lua
+    -- Update object properties at runtime
+    obj:set_properties({
+        visual_size = {x = 2, y = 2},
+        nametag = "Big Entity",
+        glow = 14,
+    })
+    local props = obj:get_properties()
+
+    -- Texture modifier (for sprites and meshes)
+    obj:set_texture_mod("^[colorize:#ff0000:50")
+    obj:set_texture_mod("")  -- clear
+
+    -- Animation (mesh entities)
+    obj:set_animation(
+        {x = 0, y = 79},  -- frame range
+        15.0,              -- FPS
+        0.0,               -- blend
+        true               -- loop
+    )
+    ```
+  </Tab>
+  <Tab title="Entity-only">
+    ```lua
+    -- Remove the entity from the world
+    obj:remove()
+
+    -- Get the luaentity table
+    local luaentity = obj:get_luaentity()
+    -- Returns nil for players
+    -- Use luaentity.name to get registered name
+
+    -- Punch the object (triggers on_punch and damage)
+    obj:punch(puncher, time_from_last_punch, tool_capabilities, dir)
+
+    -- Simulate right-click on the object
+    obj:right_click(clicker)
+    ```
+  </Tab>
+</Tabs>
+
+## Entity lifecycle callbacks
+
+| Callback | When called |
+|----------|------------|
+| `on_activate(self, staticdata, dtime_s)` | Entity spawned or mapblock loaded |
+| `on_deactivate(self, removal)` | About to be removed (`removal=true`) or unloaded (`removal=false`) |
+| `on_step(self, dtime, moveresult)` | Every server step while active |
+| `on_punch(self, puncher, time_from_last_punch, tool_capabilities, dir, damage)` | Punched by an object |
+| `on_death(self, killer)` | HP drops to 0 |
+| `on_rightclick(self, clicker)` | Right-click / place key while pointing |
+| `on_attach_child(self, child)` | Another object attached to this one |
+| `on_detach_child(self, child)` | A child detached |
+| `on_detach(self, parent)` | This entity detached from its parent |
+| `get_staticdata(self)` | Should return a serialized string to persist |
+
+## moveresult in on_step
+
+When `physical = true`, `on_step` receives a `moveresult` table with collision information:
+
+```lua
+on_step = function(self, dtime, moveresult)
+    if not moveresult then return end  -- nil if physical=false
+
+    if moveresult.touching_ground then
+        -- Entity just landed on a surface
+    end
+
+    if moveresult.standing_on_object then
+        -- Standing on top of another object
+    end
+
+    -- Examine individual collisions
+    for _, col in ipairs(moveresult.collisions) do
+        if col.type == "node" then
+            -- col.node_pos: position of the colliding node
+            -- col.axis: "x", "y", or "z"
+        elseif col.type == "object" then
+            -- col.object: ObjectRef of the other object
+        end
+        -- col.old_velocity, col.new_velocity: velocity before/after
+    end
+ end,
+```
+
+## Finding objects in the world
+
+```lua
+-- All objects within a radius (Euclidean)
+for obj in core.objects_inside_radius(center, 10) do
+    if obj:is_valid() then
+        local entity = obj:get_luaentity()
+        if entity and entity.name == "mymod:firefly" then
+            obj:remove()
+        end
+    end
+end
+
+-- All objects in an axis-aligned box
+for obj in core.objects_in_area(min_pos, max_pos) do
+    -- ...
+end
+
+-- Get a specific player
+local player = core.get_player_by_name("singleplayer")
+```
+
+<Warning>
+Stored `ObjectRef` values can become invalid at any time. Always call `obj:is_valid()` before using a cached reference, especially after yielding or across server steps.
+</Warning>
+
+## Custom entity with persistence
+
+Here is a complete example of a persistent NPC-style entity:
+
+```lua
+core.register_entity("mymod:wanderer", {
+    initial_properties = {
+        visual = "mesh",
+        mesh = "mymod_wanderer.b3d",
+        textures = {"mymod_wanderer.png"},
+        physical = true,
+        collisionbox = {-0.4, 0, -0.4, 0.4, 1.8, 0.4},
+        stepheight = 0.6,
+        hp_max = 20,
+        nametag = "Wanderer",
+        static_save = true,
+    },
+
+    _hp = 20,
+    _target_pos = nil,
+
+    on_activate = function(self, staticdata, dtime_s)
+        if staticdata ~= "" then
+            local data = core.deserialize(staticdata)
+            if data then
+                self._hp = data.hp
+                self.object:set_hp(self._hp)
+            end
+        end
+        self.object:set_armor_groups({fleshy = 100})
+    end,
+
+    on_step = function(self, dtime, moveresult)
+        -- Pick a new random target position every few seconds
+        if not self._target_pos or
+           vector.distance(self.object:get_pos(), self._target_pos) < 1 then
+            local pos = self.object:get_pos()
+            self._target_pos = {
+                x = pos.x + math.random(-10, 10),
+                y = pos.y,
+                z = pos.z + math.random(-10, 10),
+            }
+        end
+        -- Move toward target
+        local pos = self.object:get_pos()
+        local dir = vector.direction(pos, self._target_pos)
+        self.object:set_velocity(vector.multiply(dir, 2))
+        self.object:set_yaw(math.atan2(-dir.x, dir.z))
+    end,
+
+    get_staticdata = function(self)
+        return core.serialize({hp = self.object:get_hp()})
+    end,
+})
+```

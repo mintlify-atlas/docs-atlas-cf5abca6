@@ -1,0 +1,266 @@
+---
+title: "Item API"
+description: "Reference for the Luanti item and craft recipe API, including ItemStack methods, item string format, and craft result queries."
+---
+
+Items are things held by players, dropped in the world, and stored in inventories. They come in three kinds: **nodes** (placeable blocks), **tools** (have wear), and **craftitems** (general-purpose). All item stacks are represented by the `ItemStack` class.
+
+## Item string format
+
+An item string (also called a "stackstring") has up to four components:
+
+```
+<identifier> [<amount>[ <wear>[ <metadata>]]]
+```
+
+Examples:
+
+```lua
+"default:apple"           -- 1 apple
+"default:dirt 5"          -- 5 dirt
+"default:pick_stone"      -- new stone pickaxe
+"default:pick_wood 1 21323"  -- wooden pickaxe, about 1/3 worn
+```
+
+<Note>
+For complex item strings with metadata, build them using `ItemStack` methods rather than string concatenation to avoid serialization bugs.
+</Note>
+
+## Item definitions
+
+<ParamField path="core.get_item_def(itemstring)" type="function">
+  Returns the item definition table for the given item name, or `nil` if the item is not registered.
+
+  - `itemstring` (string): Item name like `"default:stone"`.
+
+  **Returns:** item definition table or `nil`
+
+  You can also access registered definitions directly:
+
+  ```lua
+  core.registered_items["default:stone"]
+  core.registered_nodes["default:stone"]
+  ```
+</ParamField>
+
+## Craft recipes
+
+<ParamField path="core.get_craft_result(input)" type="function">
+  Looks up the crafting result for a given input.
+
+  - `input` (table):
+    - `input.method`: `"normal"`, `"cooking"`, or `"fuel"`
+    - `input.width`: number, e.g. `3` for a 3-wide grid
+    - `input.items`: list of `ItemStack`s (indices 1–9 for a 3×3 grid)
+
+  **Returns:** `output, decremented_input`
+  - `output.item`: resulting `ItemStack`; empty if no match
+  - `output.time`: cooking/fuel time; `0` if no match
+  - `output.replacements`: list of replacement `ItemStack`s
+  - `decremented_input`: input table with items reduced by 1
+</ParamField>
+
+<ParamField path="core.get_craft_recipe(output)" type="function">
+  Returns the last registered recipe that produces `output`.
+
+  - `output` (string): Item name string, e.g. `"default:torch"`.
+
+  **Returns:** input table:
+  - `input.method`: `"normal"`, `"cooking"`, or `"fuel"`
+  - `input.width`: grid width
+  - `input.items`: list of items; `nil` if no recipe found
+</ParamField>
+
+<ParamField path="core.get_all_craft_recipes(query)" type="function">
+  Returns all recipes that produce `query`, or `nil` if none exist.
+
+  - `query` (string): Item name to search for.
+
+  **Returns:** indexed table of recipe entries, or `nil`:
+  ```lua
+  {
+      {
+          method = "cooking",
+          width  = 3,
+          output = "default:gold_ingot",
+          items  = {"default:gold_lump"},
+      },
+      -- ...
+  }
+  ```
+</ParamField>
+
+```lua
+-- Find all recipes for gold ingots
+local recipes = core.get_all_craft_recipes("default:gold_ingot")
+if recipes then
+    for i, recipe in ipairs(recipes) do
+        print("Recipe " .. i .. " uses method: " .. recipe.method)
+    end
+end
+```
+
+## ItemStack class
+
+Create an `ItemStack` via `ItemStack(x)` where `x` is an `ItemStack`, an item string, a table, or `nil`.
+
+```lua
+local stack = ItemStack("default:stone 10")
+local empty = ItemStack(nil)
+```
+
+### Inspection methods
+
+<ResponseField name="stack:is_empty()" type="boolean">
+  Returns `true` if the stack contains no items.
+</ResponseField>
+
+<ResponseField name="stack:get_name()" type="string">
+  Returns the item name, e.g. `"default:stone"`.
+</ResponseField>
+
+<ResponseField name="stack:get_count()" type="number">
+  Returns the number of items in the stack.
+</ResponseField>
+
+<ResponseField name="stack:get_wear()" type="number">
+  Returns tool wear 0–65535. Non-tools always return `0`.
+</ResponseField>
+
+<ResponseField name="stack:get_meta()" type="ItemStackMetaRef">
+  Returns the item's metadata reference for reading and writing extra data.
+</ResponseField>
+
+<ResponseField name="stack:get_description()" type="string">
+  Returns the description shown in inventory tooltips. Checks `description` in metadata, then item definition, then falls back to the item name.
+</ResponseField>
+
+<ResponseField name="stack:get_short_description()" type="string or nil">
+  Returns the short description (first line of description), or `nil` if none is defined.
+</ResponseField>
+
+<ResponseField name="stack:get_stack_max()" type="number">
+  Returns the maximum number of items this stack can hold.
+</ResponseField>
+
+<ResponseField name="stack:get_free_space()" type="number">
+  Returns `get_stack_max() - get_count()`.
+</ResponseField>
+
+<ResponseField name="stack:is_known()" type="boolean">
+  Returns `true` if the item name refers to a registered item type.
+</ResponseField>
+
+<ResponseField name="stack:get_definition()" type="table">
+  Returns the item definition table.
+</ResponseField>
+
+<ResponseField name="stack:get_tool_capabilities()" type="table">
+  Returns the digging properties of this item, or the hand's properties if none are defined.
+</ResponseField>
+
+### Modification methods
+
+<ResponseField name="stack:set_name(item_name)" type="boolean">
+  Sets the item name. Returns `true` if the stack was cleared as a result.
+</ResponseField>
+
+<ResponseField name="stack:set_count(count)" type="boolean">
+  Sets the count (unsigned 16-bit integer). Returns `true` if the stack was cleared.
+</ResponseField>
+
+<ResponseField name="stack:set_wear(wear)" type="boolean">
+  Sets the wear value (unsigned 16-bit integer). Returns `true` if the stack was cleared.
+</ResponseField>
+
+<ResponseField name="stack:add_wear(amount)" type="nil">
+  Increases wear by `amount` if the item is a tool. Valid range: 0–65536.
+</ResponseField>
+
+<ResponseField name="stack:add_wear_by_uses(max_uses)" type="nil">
+  Increases wear so the item breaks after exactly `max_uses` total uses when only this function is used to apply wear.
+</ResponseField>
+
+<ResponseField name="stack:clear()" type="nil">
+  Removes all items, making the stack empty.
+</ResponseField>
+
+<ResponseField name="stack:replace(item)" type="nil">
+  Replaces the stack's contents. `item` may be an item string, table, or `ItemStack`.
+</ResponseField>
+
+### Stack operations
+
+<ResponseField name="stack:add_item(item)" type="ItemStack">
+  Adds `item` to this stack. Returns any leftover items that did not fit.
+</ResponseField>
+
+<ResponseField name="stack:item_fits(item)" type="boolean">
+  Returns `true` if `item` can be fully added to this stack.
+</ResponseField>
+
+<ResponseField name="stack:take_item(n)" type="ItemStack">
+  Removes and returns up to `n` items (default: 1) from the stack.
+</ResponseField>
+
+<ResponseField name="stack:peek_item(n)" type="ItemStack">
+  Returns up to `n` items without removing them.
+</ResponseField>
+
+### Conversion methods
+
+<ResponseField name="stack:to_string()" type="string">
+  Returns the stack in item string form.
+</ResponseField>
+
+<ResponseField name="stack:to_table()" type="table">
+  Returns the stack as a Lua table `{name, count, wear, metadata}`.
+</ResponseField>
+
+<ResponseField name="stack:equals(other)" type="boolean">
+  Returns `true` if this stack is identical to `other` (another `ItemStack`).
+</ResponseField>
+
+```lua
+-- Building a pickaxe with custom description
+local pick = ItemStack("default:pick_steel")
+pick:set_wear(10000)
+pick:get_meta():set_string("description", "Trusty Old Pickaxe")
+
+print(pick:get_description())   -- "Trusty Old Pickaxe"
+print(pick:to_string())          -- item string with wear and meta
+```
+
+## Item metadata
+
+Item stacks carry a key-value metadata store via `ItemStackMetaRef` (obtained from `stack:get_meta()`). Several keys have special meanings:
+
+| Key | Effect |
+|---|---|
+| `description` | Overrides the item's displayed description |
+| `short_description` | Overrides the short description |
+| `inventory_image` | Overrides the inventory image |
+| `wield_image` | Overrides the wield image |
+| `color` | ColorString for hardware colorization |
+| `palette_index` | Palette index for colored nodes |
+| `range` | Overrides the item's pointing range |
+
+```lua
+local meta = stack:get_meta()
+meta:set_string("description", "Enchanted Sword")
+meta:set_float("range", 6.0)
+```
+
+## Color helpers
+
+<ParamField path="core.itemstring_with_palette(item, palette_index)" type="function">
+  Returns an item string that encodes `palette_index` in its metadata for hardware colorization.
+
+  **Returns:** `string`
+</ParamField>
+
+<ParamField path="core.itemstring_with_color(item, colorstring)" type="function">
+  Returns an item string that encodes a static color in its metadata.
+
+  **Returns:** `string`
+</ParamField>

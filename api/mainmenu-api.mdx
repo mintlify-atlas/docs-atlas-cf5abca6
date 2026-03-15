@@ -1,0 +1,590 @@
+---
+title: "Main Menu Lua API"
+description: "Complete reference for the Luanti main menu Lua API, including callbacks, game management, server list, UI helpers, filesystem, HTTP, and async operations."
+---
+
+The main menu in Luanti is defined as a formspec by Lua scripts located in `builtin/mainmenu/`. You can extend it by understanding the API described here.
+
+<Note>
+Formspec language syntax is described in `lua_api.md`. When embedding image or 3D model paths in a formspec, sanitize them first with `core.formspec_escape(path)` — paths in subdirectories use different delimiters on different operating systems.
+</Note>
+
+---
+
+## Callbacks
+
+The main menu exposes three top-level callbacks. Define them to respond to user actions.
+
+### `core.button_handler`
+
+```lua
+function core.button_handler(fields)
+    -- fields = {name1 = value1, name2 = value2, ...}
+end
+```
+
+Called whenever a button is pressed in the main menu formspec.
+
+<ParamField body="fields" type="table">
+  A table of field name/value pairs from the submitted form.
+</ParamField>
+
+```lua
+function core.button_handler(fields)
+    if fields.btn_singleplayer then
+        -- user clicked the singleplayer button
+    end
+end
+```
+
+---
+
+### `core.event_handler`
+
+```lua
+function core.event_handler(event)
+end
+```
+
+Called when a menu-level event is emitted.
+
+<ParamField body="event" type="string">
+  The event name. Standard values:
+  - `"MenuQuit"` — user quit the menu (derived from `quit`)
+  - `"FullscreenChange"` — window fullscreen state changed
+  - `"Refresh"` — server list refresh (custom event)
+</ParamField>
+
+---
+
+### `core.on_before_close`
+
+```lua
+function core.on_before_close()
+end
+```
+
+Called immediately before the menu closes, either to exit the engine or to join a game. Use this to save state.
+
+---
+
+## Starting and Closing
+
+### `core.start`
+
+```lua
+core.start()
+```
+
+Starts a game session using the `gamedata` table. Populate `gamedata` before calling this:
+
+```lua
+gamedata = {
+    playername     = "player",
+    password       = "",
+    address        = "luanti.example.org",
+    port           = 30000,
+    selected_world = 1,   -- 0 for client (CSM-only) mode
+    singleplayer   = false,
+}
+core.start()
+```
+
+<ResponseField name="playername" type="string">
+  The player's username.
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  The player's password.
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  Server IP or domain name. Empty string for a local server.
+</ResponseField>
+
+<ResponseField name="port" type="number">
+  Server port number.
+</ResponseField>
+
+<ResponseField name="selected_world" type="number">
+  Index into the worlds list. Use `0` for client mode.
+</ResponseField>
+
+<ResponseField name="singleplayer" type="boolean">
+  Whether this is a singleplayer session.
+</ResponseField>
+
+---
+
+### `core.close`
+
+```lua
+core.close()
+```
+
+Exits the Luanti engine entirely.
+
+---
+
+## Version and Protocol
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.get_version()` | `string` | Current engine version string |
+| `core.get_min_supp_proto()` | `number` | Minimum supported network protocol version |
+| `core.get_max_supp_proto()` | `number` | Maximum supported network protocol version |
+| `core.get_formspec_version()` | `number` | Maximum supported formspec version |
+
+---
+
+## Worlds
+
+### `core.get_worlds`
+
+```lua
+core.get_worlds()
+```
+
+Returns a list of all worlds (can be called in async context):
+
+```lua
+{
+    [1] = {
+        path   = "/home/user/.minetest/worlds/myworld",
+        name   = "myworld",
+        gameid = "minetest",
+    },
+    ...
+}
+```
+
+---
+
+### `core.create_world`
+
+```lua
+core.create_world(worldname, gameid, init_settings)
+```
+
+Creates a new world.
+
+<ParamField body="worldname" type="string">
+  Name for the new world.
+</ParamField>
+
+<ParamField body="gameid" type="string">
+  The game ID to use.
+</ParamField>
+
+<ParamField body="init_settings" type="table">
+  Initial settings for the world.
+</ParamField>
+
+---
+
+### `core.delete_world`
+
+```lua
+core.delete_world(index)
+```
+
+Deletes the world at the given index in the worlds list.
+
+---
+
+## Games and Content
+
+### `core.get_games`
+
+```lua
+core.get_games()
+```
+
+Returns a table of all installed games (can be called in async context):
+
+```lua
+{
+    {
+        id             = "minetest",
+        path           = "/usr/share/minetest/games/minetest",
+        gamemods_path  = "/usr/share/minetest/games/minetest/mods",
+        title          = "Minetest Game",
+        menuicon_path  = "/usr/share/minetest/games/minetest/menu/icon.png",
+        author         = "celeron55",
+        aliases        = {},
+    },
+    ...
+}
+```
+
+<Note>
+The `name` field is deprecated. Use `title` instead.
+</Note>
+
+---
+
+### `core.get_content_info`
+
+```lua
+core.get_content_info(path)
+```
+
+Returns metadata about any installed content (mod, modpack, game, or texture pack) at `path`:
+
+```lua
+{
+    name             = "technical_id",
+    type             = "mod",  -- or "modpack", "game", "txp", "unknown"
+    title            = "Human Readable Title",
+    description      = "description text",
+    author           = "author",
+    path             = "path/to/content",
+    textdomain       = "textdomain",
+    depends          = {"mod", "names"},  -- mods only
+    optional_depends = {"mod", "names"},  -- mods only
+}
+```
+
+---
+
+### `core.get_mod_list`
+
+```lua
+core.get_mod_list(path, virtual_path)
+```
+
+Returns a flat list of mod and modpack information found within the specified path. Each entry contains: `name`, `author`, `release`, `description`, `path`, `virtual_path`, `is_name_explicit`, `is_modpack`, `modpack_depth`.
+
+---
+
+### `core.check_mod_configuration`
+
+```lua
+core.check_mod_configuration(world_path, mod_paths)
+```
+
+Validates that a set of mods can be loaded together for a given world.
+
+<ParamField body="world_path" type="string">
+  Absolute path to the world directory.
+</ParamField>
+
+<ParamField body="mod_paths" type="table">
+  List of enabled mod paths.
+</ParamField>
+
+Returns:
+
+```lua
+{
+    is_consistent  = true,
+    unsatisfied_mods = {},   -- list of mod specs with unmet dependencies
+    satisfied_mods   = {},   -- list of mod specs that resolved correctly
+    error_message    = "",   -- error string, or nil
+}
+```
+
+---
+
+### `core.get_content_translation`
+
+```lua
+core.get_content_translation(path, domain, string)
+```
+
+Translates `string` using the specified `domain` in the content directory at `path`.
+
+```lua
+local translated = core.get_content_translation(
+    "mods/mymod",
+    "mymod",
+    core.translate("mymod", "Hello World")
+)
+```
+
+---
+
+## Path Functions
+
+<Accordion title="Path and filesystem query functions">
+
+All of these can be called in async contexts.
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.get_user_path()` | `string` | Global user data directory |
+| `core.get_modpath()` | `string` | Global user modpath |
+| `core.get_modpaths()` | `table` | All modpaths (virtual → real) |
+| `core.get_clientmodpath()` | `string` | Client-side modpath |
+| `core.get_gamepath()` | `string` | Global gamepath |
+| `core.get_texturepath()` | `string` | Default textures path |
+| `core.get_builtin_path()` | `string` | Builtin root path |
+| `core.get_cache_path()` | `string` | Cache directory |
+| `core.get_temp_path([param])` | `string` | New temp file (param=true) or temp folder |
+
+</Accordion>
+
+---
+
+## Filesystem Operations
+
+<Note>
+Use `DIR_DELIM` instead of hardcoding `/` or `\` as a directory separator:
+
+```lua
+local path = "my" .. DIR_DELIM .. "custom" .. DIR_DELIM .. "path"
+```
+</Note>
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.create_dir(absolute_path)` | `boolean` | Create a directory |
+| `core.delete_dir(absolute_path)` | `boolean` | Delete a directory |
+| `core.copy_dir(source, destination, keep_source)` | `boolean` | Copy a directory. `keep_source` defaults to `true`. |
+| `core.is_dir(path)` | `boolean` | Returns `true` if path is a valid directory |
+| `core.extract_zip(zipfile, destination)` | `boolean` | Extract a zip archive |
+| `core.open_dir(path)` | `boolean` | Open a path in the system file explorer |
+| `core.open_url(url)` | `boolean` | Open a URL in the system browser (must start with `http://` or `https://`) |
+| `core.open_url_dialog(url)` | — | Show a dialog before opening a URL |
+| `core.share_file(path)` | — | Android only: share a file via the OS share popup |
+
+---
+
+## Formspec Helpers
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.update_formspec(formspec)` | — | Update the currently displayed formspec |
+| `core.get_table_index(tablename)` | `number` | Get selected row index in a table or textlist |
+| `core.formspec_escape(string)` | `string` | Escape `[ ] \ , ;` characters for use in formspecs |
+| `core.explode_table_event(string)` | `table` | Parse a table event string to `{type, row, column}` |
+| `core.explode_textlist_event(string)` | `table` | Parse a textlist event string to `{type, index}` |
+| `core.set_formspec_prepend(formspec)` | — | Prepend a formspec fragment to every main menu formspec (for theming) |
+
+Event `type` values: `"INV"` (no selection), `"CHG"` (selected), `"DCL"` (double-click).
+
+---
+
+## GUI
+
+### `core.set_background`
+
+```lua
+core.set_background(type, texturepath, [tile], [minsize])
+```
+
+<ParamField body="type" type="string">
+  One of `"background"`, `"overlay"`, `"header"`, or `"footer"`.
+</ParamField>
+
+<ParamField body="texturepath" type="string">
+  Path to the texture image.
+</ParamField>
+
+<ParamField body="tile" type="boolean">
+  Tile the image instead of scaling. Background type only.
+</ParamField>
+
+<ParamField body="minsize" type="number">
+  Minimum tile size before tiling. Background type only.
+</ParamField>
+
+---
+
+### Other GUI Functions
+
+| Function | Description |
+|---|---|
+| `core.set_clouds(bool)` | Show or hide main menu clouds |
+| `core.set_clouds_color(colorString)` | Set cloud color |
+| `core.set_sky_color(colorString)` | Set sky color (`"#RRGGBB"`) |
+| `core.set_topleft_text(text)` | Set text in the top-left corner |
+| `core.show_touchscreen_layout()` | Show the touchscreen layout overlay |
+| `core.show_path_select_dialog(formname, caption, is_file_select)` | Show a file/folder picker dialog |
+| `core.get_active_driver()` | Returns the video driver name, e.g. `"opengl"` |
+| `core.get_active_renderer()` | Returns the renderer name, e.g. `"OpenGL 4.6"` |
+| `core.get_active_irrlicht_device()` | Returns the Irrlicht device name, e.g. `"SDL"` |
+| `core.get_window_info()` | Returns window size, max formspec size, GUI/HUD scaling, touch mode |
+
+---
+
+## Sound
+
+### `core.sound_play`
+
+```lua
+local handle = core.sound_play(spec, looped)
+```
+
+<ParamField body="spec" type="SimpleSoundSpec">
+  The sound specification (see `lua_api.md`).
+</ParamField>
+
+<ParamField body="looped" type="boolean">
+  Whether to loop the sound.
+</ParamField>
+
+Returns a handle. Stop with `handle:stop()` or `core.sound_stop(handle)`.
+
+---
+
+## HTTP Requests
+
+<Warning>
+HTTP functions are only available if Luanti was built with cURL support.
+</Warning>
+
+### `core.get_http_api`
+
+```lua
+local http = core.get_http_api()
+```
+
+Returns an `HTTPApiTable` with three functions:
+
+---
+
+### `HTTPApiTable.fetch_sync`
+
+```lua
+local result = http.fetch_sync(request)
+```
+
+Performs a synchronous HTTP request. Blocks until complete.
+
+---
+
+### `HTTPApiTable.fetch_async`
+
+```lua
+local handle = http.fetch_async(request)
+```
+
+Starts an asynchronous HTTP request. Returns a handle.
+
+---
+
+### `HTTPApiTable.fetch_async_get`
+
+```lua
+local result = http.fetch_async_get(handle)
+```
+
+Checks the status of an async request. Call repeatedly until `result.completed` is `true`.
+
+---
+
+### HTTPRequest definition
+
+```lua
+{
+    url          = "https://example.org/api",
+    timeout      = 10,       -- connection timeout in seconds (default: 3)
+    post_data    = "raw body" -- or {field1="val", field2="val"}
+                             -- omit for a GET request
+    user_agent   = "MyMod/1.0",       -- optional
+    extra_headers = { "Accept: application/json" },  -- optional
+    multipart    = false,    -- optional, default false
+}
+```
+
+### HTTPRequestResult definition
+
+```lua
+{
+    completed = true,    -- request is finished
+    succeeded = true,    -- request was successful
+    timeout   = false,   -- request timed out
+    code      = 200,     -- HTTP status code
+    data      = "...",   -- response body
+}
+```
+
+---
+
+## Settings
+
+```lua
+core.settings:set(name, value)
+core.settings:get(name)          -- returns string or nil
+core.settings:set_bool(name, value)
+core.settings:get_bool(name)     -- returns bool or nil
+core.settings:save()             -- write all settings to config file
+```
+
+---
+
+## Logging
+
+```lua
+core.log(line)
+core.log(loglevel, line)   -- loglevel: "error", "action", "info", "verbose"
+core.debug(line)           -- always printed to stderr and logfile
+```
+
+---
+
+## Async Operations
+
+### `core.handle_async`
+
+```lua
+core.handle_async(async_job, parameters, finished)
+```
+
+Executes a function asynchronously on a worker thread.
+
+<ParamField body="async_job" type="function">
+  A function that takes one parameter and returns one parameter. Runs off the main thread.
+</ParamField>
+
+<ParamField body="parameters" type="table">
+  The parameter table passed to `async_job`.
+</ParamField>
+
+<ParamField body="finished" type="function">
+  Callback called on the main thread once `async_job` completes. Receives the return value of `async_job`.
+</ParamField>
+
+```lua
+core.handle_async(
+    function(params)
+        -- runs on worker thread
+        return { result = params.x * 2 }
+    end,
+    { x = 21 },
+    function(result)
+        core.log("Result: " .. tostring(result.result))  -- 42
+    end
+)
+```
+
+<Warning>
+Async jobs have **no access to global Lua variables** and only a limited set of functions. Functions that modify the menu (like `core.start`, `core.close`, `core.show_path_select_dialog`) are unavailable inside `async_job`.
+</Warning>
+
+---
+
+## Background Music
+
+The main menu plays background music automatically. It looks for a sound named `main_menu` in `$USER_PATH/sounds/`, using the same naming conventions as regular sounds (the engine picks randomly from `main_menu.ogg`, `main_menu.0.ogg`, etc.). It plays looped at gain `1.0`.
+
+---
+
+## Helpers
+
+| Function | Returns | Description |
+|---|---|---|
+| `core.get_us_time()` | `number` | Current time in microseconds |
+| `core.gettext(string)` | `string` | Look up a gettext translation |
+| `fgettext_ne(string, ...)` | `string` | Translate and substitute `$1`...`$9` placeholders |
+| `fgettext(string, ...)` | `string` | Like `fgettext_ne`, but applies `core.formspec_escape` |
+| `core.parse_json(string [, nullvalue])` | `any` | Parse JSON string |
+| `core.is_yes(arg)` | `boolean` | Whether `arg` is truthy |
+| `core.encode_base64(string)` | `string` | Base64 encode |
+| `core.decode_base64(string)` | `string` | Base64 decode |
+| `core.urlencode(str)` | `string` | Percent-encode URI characters |
+| `core.get_mapgen_names([include_hidden])` | `table` | All registered mapgen algorithm names |
+| `dump(obj)` | `string` | Serialize object to string |
+| `string:split(separator)` | `table` | Split string by separator |
+| `string:trim()` | `string` | Strip leading/trailing whitespace |

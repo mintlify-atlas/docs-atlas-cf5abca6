@@ -1,0 +1,418 @@
+---
+title: "Client-Side Callbacks"
+description: "Complete reference for all client-side (CSM) callback registration functions in Luanti's core API."
+---
+
+You register callbacks by calling these functions during mod load time — that is, during the execution of your `init.lua`. Luanti then calls your functions in response to game events.
+
+<Warning>
+Call all `core.register_*` functions **only at load time**. Registering callbacks after startup (e.g. from inside another callback) is not supported.
+</Warning>
+
+---
+
+## Lifecycle Callbacks
+
+### `core.register_globalstep`
+
+```lua
+core.register_globalstep(function(dtime) end)
+```
+
+Called every client environment step.
+
+<ParamField body="dtime" type="number">
+  Time in seconds since the last execution of this callback.
+</ParamField>
+
+```lua
+core.register_globalstep(function(dtime)
+    -- runs every frame/step
+end)
+```
+
+---
+
+### `core.register_on_mods_loaded`
+
+```lua
+core.register_on_mods_loaded(function() end)
+```
+
+Called once, immediately after all client mods have finished loading. Use this for any initialization that requires other mods to be loaded first.
+
+---
+
+### `core.register_on_shutdown`
+
+```lua
+core.register_on_shutdown(function() end)
+```
+
+Called before the client shuts down.
+
+<Warning>
+If the client terminates abnormally (crash), registered shutdown callbacks will likely **not** run. Save important state periodically in `register_globalstep` rather than relying solely on this callback.
+</Warning>
+
+---
+
+## Chat Callbacks
+
+### `core.register_on_receiving_chat_message`
+
+```lua
+core.register_on_receiving_chat_message(function(message) end)
+```
+
+Called every time the client receives a chat message from the server.
+
+<ParamField body="message" type="string">
+  The chat message text received from the server.
+</ParamField>
+
+Return `true` to mark the message as handled — it will **not** be displayed in the chat window.
+
+```lua
+core.register_on_receiving_chat_message(function(message)
+    if message:find("secret") then
+        -- suppress messages containing "secret"
+        return true
+    end
+end)
+```
+
+---
+
+### `core.register_on_sending_chat_message`
+
+```lua
+core.register_on_sending_chat_message(function(message) end)
+```
+
+Called every time the local player sends a message from the chat input.
+
+<ParamField body="message" type="string">
+  The message the player is about to send.
+</ParamField>
+
+Return `true` to mark the message as handled — it will **not** be sent to the server.
+
+```lua
+core.register_on_sending_chat_message(function(message)
+    if message == "/mycommand" then
+        core.display_chat_message("Handled locally!")
+        return true  -- don't forward to server
+    end
+end)
+```
+
+---
+
+### `core.register_on_chatcommand`
+
+```lua
+core.register_on_chatcommand(function(command, params) end)
+```
+
+Called whenever a chatcommand is triggered. Fires before `core.registered_chatcommands` is checked, but after the input is parsed.
+
+<ParamField body="command" type="string">
+  The command name (without the leading `/`).
+</ParamField>
+
+<ParamField body="params" type="string">
+  The parameters string following the command.
+</ParamField>
+
+Return `true` to mark the command as handled, which prevents the default command handlers from running.
+
+---
+
+## Player State Callbacks
+
+### `core.register_on_hp_modification`
+
+```lua
+core.register_on_hp_modification(function(hp) end)
+```
+
+Called when the server modifies the local player's HP.
+
+<ParamField body="hp" type="number">
+  The new HP value after modification.
+</ParamField>
+
+```lua
+core.register_on_hp_modification(function(hp)
+    core.display_chat_message("HP changed to: " .. tostring(hp))
+end)
+```
+
+---
+
+### `core.register_on_damage_taken`
+
+```lua
+core.register_on_damage_taken(function(hp) end)
+```
+
+Called when the local player takes damage.
+
+<ParamField body="hp" type="number">
+  The amount of damage (HP) taken.
+</ParamField>
+
+---
+
+## Inventory and Interaction Callbacks
+
+### `core.register_on_formspec_input`
+
+```lua
+core.register_on_formspec_input(function(formname, fields) end)
+```
+
+Called when a button is pressed in the local player's inventory form. Newer registered functions are called first.
+
+<ParamField body="formname" type="string">
+  The name of the formspec that received input.
+</ParamField>
+
+<ParamField body="fields" type="table">
+  A table of field name/value pairs submitted by the form.
+</ParamField>
+
+Return `true` to stop processing — remaining registered functions will not be called.
+
+```lua
+core.register_on_formspec_input(function(formname, fields)
+    if formname == "mymod:mymenu" then
+        if fields.confirm then
+            core.display_chat_message("Confirmed!")
+        end
+        return true
+    end
+end)
+```
+
+---
+
+### `core.register_on_inventory_open`
+
+```lua
+core.register_on_inventory_open(function(inventory) end)
+```
+
+Called when the local player opens their inventory. Newer registered functions are called first.
+
+<ParamField body="inventory" type="table">
+  The inventory object being opened.
+</ParamField>
+
+Return `true` to prevent the inventory from opening.
+
+---
+
+## Node Interaction Callbacks
+
+### `core.register_on_dignode`
+
+```lua
+core.register_on_dignode(function(pos, node) end)
+```
+
+Called when the local player digs a node. Newer registered functions are called first.
+
+<ParamField body="pos" type="table">
+  Position of the node being dug: `{x=number, y=number, z=number}`.
+</ParamField>
+
+<ParamField body="node" type="table">
+  Node table: `{name=string, param1=number, param2=number}`.
+</ParamField>
+
+Return `true` from any function to **cancel** the dig — the node will not be removed.
+
+```lua
+core.register_on_dignode(function(pos, node)
+    if node.name == "default:stone" then
+        core.display_chat_message("You dug stone at " .. core.pos_to_string(pos))
+    end
+end)
+```
+
+---
+
+### `core.register_on_punchnode`
+
+```lua
+core.register_on_punchnode(function(pos, node) end)
+```
+
+Called when the local player punches a node. Newer registered functions are called first.
+
+<ParamField body="pos" type="table">
+  Position of the punched node: `{x=number, y=number, z=number}`.
+</ParamField>
+
+<ParamField body="node" type="table">
+  Node table: `{name=string, param1=number, param2=number}`.
+</ParamField>
+
+Return `true` from any function to **ignore** the punch.
+
+---
+
+### `core.register_on_placenode`
+
+```lua
+core.register_on_placenode(function(pointed_thing, node) end)
+```
+
+Called after a node has been placed by the local player.
+
+<ParamField body="pointed_thing" type="table">
+  The pointed thing describing where the node was placed. One of:
+  - `{type="nothing"}`
+  - `{type="node", under=pos, above=pos}`
+  - `{type="object", id=ObjectID}`
+</ParamField>
+
+<ParamField body="node" type="table">
+  The node that was placed: `{name=string, param1=number, param2=number}`.
+</ParamField>
+
+---
+
+### `core.register_on_item_use`
+
+```lua
+core.register_on_item_use(function(item, pointed_thing) end)
+```
+
+Called when the local player uses an item. Newer registered functions are called first.
+
+<ParamField body="item" type="ItemStack">
+  The item being used.
+</ParamField>
+
+<ParamField body="pointed_thing" type="table">
+  What the player is pointing at when using the item.
+</ParamField>
+
+Return `true` from any function to **prevent** the item use from being sent to the server.
+
+---
+
+## Mod Channel Callbacks
+
+### `core.register_on_modchannel_message`
+
+```lua
+core.register_on_modchannel_message(function(channel_name, sender, message) end)
+```
+
+Called when an incoming mod channel message is received. You must have already joined the channel, and the server must have acknowledged the join.
+
+<ParamField body="channel_name" type="string">
+  The name of the channel the message arrived on.
+</ParamField>
+
+<ParamField body="sender" type="string">
+  The name of the player who sent the message. An empty string (`""`) means the message came from a server mod.
+</ParamField>
+
+<ParamField body="message" type="string">
+  The message content.
+</ParamField>
+
+```lua
+core.mod_channel_join("mymod:updates")
+
+core.register_on_modchannel_message(function(channel_name, sender, message)
+    if channel_name == "mymod:updates" then
+        core.display_chat_message("Server update: " .. message)
+    end
+end)
+```
+
+---
+
+### `core.register_on_modchannel_signal`
+
+```lua
+core.register_on_modchannel_signal(function(channel_name, signal) end)
+```
+
+Called when a valid incoming mod channel signal is received.
+
+<ParamField body="channel_name" type="string">
+  The name of the channel that emitted the signal.
+</ParamField>
+
+<ParamField body="signal" type="number">
+  Numeric signal ID indicating the event type:
+  - `0` — `join_ok`
+  - `1` — `join_failed`
+  - `2` — `leave_ok`
+  - `3` — `leave_failed`
+  - `4` — `event_on_not_joined_channel`
+  - `5` — `state_changed`
+</ParamField>
+
+---
+
+## Chat Command Registration
+
+### `core.register_chatcommand`
+
+```lua
+core.register_chatcommand(cmd, definition)
+```
+
+Registers a client-side chat command. The definition is added to `core.registered_chatcommands`.
+
+<ParamField body="cmd" type="string">
+  The command name (without the leading `/`).
+</ParamField>
+
+<ParamField body="definition" type="table">
+  Command definition table:
+
+  ```lua
+  {
+      params = "<param1> <param2>",  -- short parameter description
+      description = "What the command does",
+      func = function(param)         -- called when the command runs
+          -- param: the raw parameter string
+          -- return boolean success, optional string output
+      end,
+  }
+  ```
+</ParamField>
+
+```lua
+core.register_chatcommand("mymod:pos", {
+    description = "Show your current position",
+    func = function(param)
+        local pos = core.localplayer:get_pos()
+        core.display_chat_message("Position: " .. core.pos_to_string(pos, 1))
+        return true
+    end,
+})
+```
+
+---
+
+### `core.unregister_chatcommand`
+
+```lua
+core.unregister_chatcommand(name)
+```
+
+Unregisters a chat command previously registered with `register_chatcommand`.
+
+<ParamField body="name" type="string">
+  The name of the command to unregister.
+</ParamField>

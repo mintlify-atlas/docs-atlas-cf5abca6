@@ -1,0 +1,228 @@
+---
+title: "Profiling"
+description: "How to profile Luanti's performance using the built-in mod profiler, Linux perf with Hotspot, and Tracy for nanosecond-resolution tracing."
+---
+
+Luanti provides several profiling options depending on what you need to measure: Lua mod callback performance, system-level CPU usage, or fine-grained C++ and Lua function traces.
+
+## Built-in Mod Profiler
+
+Luanti's `builtin` mod includes a profiler that measures how long each Lua callback registered by mods takes to execute per server step (reporting average, minimum, and maximum times).
+
+### Enabling the profiler
+
+Enable the profiler in `minetest.conf`:
+
+```ini
+profiler.load = true
+```
+
+Additional settings control what gets instrumented:
+
+```ini
+# Also instrument individual mod callbacks
+# (see profiler.* and instrument.* settings in minetest.conf.example)
+profiler.load = true
+```
+
+### Viewing results
+
+Once the server is running, use the in-game chat command to display profiling data:
+
+```
+/profiler
+```
+
+The output shows each instrumented callback, the mod it belongs to, and the time it spent executing per server step.
+
+### Tracy integration
+
+If you build Luanti with Tracy support (see below), you can also auto-instrument all mod callback functions by enabling:
+
+```ini
+profiler.load = true
+profiler.tracy = true
+```
+
+## Profiling with Linux perf
+
+`perf` is a Linux kernel profiling tool that samples the CPU call stack at configurable intervals, producing detailed flamegraphs of where time is spent.
+
+### Prerequisites
+
+Install `perf`:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install linux-perf
+
+# Fedora/RHEL
+sudo dnf install perf
+
+# Arch
+sudo pacman -S perf
+```
+
+Build Luanti with debug symbols so `perf` can resolve symbol names:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja
+cmake --build build
+```
+
+<Note>
+  Use `RelWithDebInfo` for profiling: it retains debug symbols while keeping most compiler optimisations enabled, giving you realistic performance numbers alongside readable stack traces.
+</Note>
+
+### Recording a profile
+
+Run the client or server under `perf record`:
+
+```bash
+perf record -z --call-graph dwarf -- ./bin/luanti
+```
+
+Do whatever you want to test, then exit. `perf` writes the data to `perf.data` in the current directory.
+
+### Visualising with Hotspot
+
+[Hotspot](https://github.com/KDAB/hotspot) is a GUI frontend for `perf.data` files that provides:
+
+- Flamegraph views
+- Per-thread analysis
+- Per-function time breakdown
+- Timeline view
+
+Install it from your package manager or build from source, then open `perf.data`:
+
+```bash
+hotspot perf.data
+```
+
+### Remote Server Profiling
+
+If you need to profile a running dedicated server (without stopping it), attach `perf` by PID:
+
+```bash
+perf record -z --call-graph dwarf -F 400 -p "$(pidof luantiserver)"
+```
+
+Press `Ctrl+C` to stop recording.
+
+Collect a snapshot of the required libraries and executable for offline analysis:
+
+```bash
+perf buildid-list | grep -Eo '/[^ ]+(luantiserver|\.so)[^ ]*$' | \
+	tar -cvahf debug.tgz --files-from=- --ignore-failed-read
+```
+
+Send both `perf.data` and `debug.tgz` to the developer along with:
+
+- Your Linux distribution and version
+- The git commit the binary was built from
+- Any source modifications (if applicable)
+
+The developer can point Hotspot's **sysroot** option at the extracted `debug.tgz` to resolve symbols correctly.
+
+## Profiling with Tracy
+
+[Tracy](https://github.com/wolfpld/tracy) is a real-time, nanosecond-resolution, hybrid frame and sampling profiler. It uses a client/server architecture: Luanti acts as the client (embedded in the binary), and you run the Tracy GUI as the server to view traces remotely.
+
+> A real time, nanosecond resolution, remote telemetry, hybrid frame and sampling profiler for games and other applications.
+
+Luanti already contains frame annotations for the server step and other key frames, so you get useful data immediately.
+
+### Installing the Tracy GUI (server)
+
+Install the Tracy server (GUI) via your package manager:
+
+```bash
+# Arch
+pacman -S tracy
+
+# Build from source
+git clone https://github.com/wolfpld/tracy.git
+cd tracy/profiler
+cmake -B build -GNinja && cmake --build build
+```
+
+### Building Luanti with Tracy support
+
+Build Luanti with Tracy enabled. Match `FETCH_TRACY_GIT_TAG` to the version of the Tracy GUI you installed:
+
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DDBUILD_WITH_TRACY=1 \
+  -DFETCH_TRACY_GIT_TAG=v0.11.0 \
+  -DTRACY_ENABLE=1 \
+  -DTRACY_ONLY_LOCALHOST=1 \
+  -GNinja
+cmake --build build
+```
+
+<Tip>
+  Use `-DTRACY_ONLY_LOCALHOST=1` during development to restrict the Tracy connection to the local machine only. Remove this flag when profiling a remote server.
+</Tip>
+
+### Capturing a trace
+
+<Steps>
+  <Step title="Start the Tracy GUI">
+    Launch the Tracy server GUI. It will listen for connections on the default port.
+  </Step>
+  <Step title="Start Luanti">
+    Run your Tracy-enabled Luanti binary:
+
+    ```bash
+    ./build/bin/luanti
+    ```
+
+    Luanti should appear in the Tracy connection menu.
+  </Step>
+  <Step title="Connect and record">
+    Click **Connect** in the Tracy GUI. Tracy begins recording frame data, function timings, and memory allocations in real time.
+  </Step>
+</Steps>
+
+### Annotating C++ code
+
+To get useful per-function traces, annotate your functions with `ZoneScoped`:
+
+```cpp
+#include <tracy/Tracy.hpp>
+
+void Server::step(float dtime)
+{
+	ZoneScoped; // Tracy will record every call to this function
+	// ... function body ...
+}
+```
+
+Refer to the [Tracy documentation](https://github.com/wolfpld/tracy/releases/latest/download/tracy.pdf) for the full list of macros.
+
+### Using Tracy from Lua
+
+When Luanti is built with Tracy, the Tracy Lua API is available globally in the `tracy` table from any mod:
+
+```lua
+-- Annotate a Lua function for Tracy tracing
+local function my_heavy_callback(dtime)
+	tracy.ZoneBegin("my_heavy_callback")
+	-- ... work ...
+	tracy.ZoneEnd()
+end
+```
+
+<Warning>
+  The Tracy Lua API is accessible to **all mods**, including untrusted ones. Do not run untrusted mods on a Tracy-enabled build.
+</Warning>
+
+Enable automatic instrumentation of all mod callback functions via:
+
+```ini
+profiler.load = true
+profiler.tracy = true
+```
+
+This auto-wraps every registered mod callback with Tracy zones, giving you a complete picture of where Lua time is spent without manually annotating every function.

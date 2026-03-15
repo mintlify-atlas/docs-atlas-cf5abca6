@@ -1,0 +1,97 @@
+---
+title: "Command-line options"
+description: "All command-line flags accepted by the luanti executable, including client, server, logging, and world management options."
+---
+
+Run `luanti --help` to print all available options for your build:
+
+```bash
+luanti --help
+```
+
+## General options
+
+| Option | Type | Description |
+|---|---|---|
+| `--help` | flag | Show all allowed options and exit |
+| `--version` | flag | Print version information and exit |
+| `--config <path>` | string | Load configuration from the specified file instead of the default location |
+| `--port <port>` | string | Set the network port (UDP) |
+| `--gameid <id>` | string | Set the game ID to use; pass `list` to print available game IDs |
+| `--logfile <path>` | string | Set the log file path; pass an empty string to disable file logging |
+
+## World options
+
+| Option | Type | Description |
+|---|---|---|
+| `--world <path>` | string | Set the world directory path |
+| `--worldname <name>` | string | Select a world by name |
+| `--worldlist <format>` | string | Print a list of worlds — `path`, `name`, or `both` |
+| `--map-dir <path>` | string | Deprecated alias for `--world` |
+
+## Client options
+
+These options are only available in client builds (not the standalone server).
+
+| Option | Type | Description |
+|---|---|---|
+| `--address <addr>` | string | Address of the server to connect to; pass an empty string to start a local game |
+| `--name <name>` | string | Set the player name |
+| `--password <pw>` | string | Set the player password |
+| `--password-file <path>` | string | Read the player password from the contents of a file |
+| `--go` | flag | Skip the main menu and go directly in-game; implies a local game when used with `--world` or `--worldname` |
+| `--server` | flag | Run as a dedicated server |
+| `--console` | flag | Start with the console open (Windows only) |
+| `--random-input` | flag | Enable random user input — used for automated testing |
+
+## Server management options
+
+These options require the `--server` flag (or a server-only build).
+
+| Option | Type | Description |
+|---|---|---|
+| `--terminal` | flag | Enable the ncurses interactive server terminal |
+| `--migrate <backend>` | string | Migrate the map database to a different backend |
+| `--migrate-players <backend>` | string | Migrate the player database to a different backend |
+| `--migrate-auth <backend>` | string | Migrate the auth database to a different backend |
+| `--migrate-mod-storage <backend>` | string | Migrate the mod storage database to a different backend |
+| `--recompress` | flag | Recompress all blocks in the map database |
+
+## Logging options
+
+| Option | Type | Description |
+|---|---|---|
+| `--quiet` | flag | Print only errors to the console |
+| `--info` | flag | Print more information to the console |
+| `--verbose` | flag | Print even more information to the console |
+| `--trace` | flag | Print very large amounts of information to the log and console |
+| `--color <mode>` | string | Colorized log output: `always`, `never`, or `auto` (default: `auto`) |
+| `--log-timestamp <mode>` | string | Log timestamp format: `wall`, `relative`, or `none` (default: `wall`) |
+
+## Testing options
+
+| Option | Type | Description |
+|---|---|---|
+| `--run-unittests` | flag | Run all unit tests and exit |
+| `--run-benchmarks` | flag | Run all benchmarks and exit |
+| `--test-module <name>` | string | Run only the specified test module or benchmark |
+| `--debugger` | flag | Attempt to automatically attach a debugger before starting |
+
+## Examples
+
+```bash
+# Start a dedicated server on port 30001 using a specific world
+luanti --server --world /srv/luanti/worlds/myworld --port 30001
+
+# Connect directly to a server, skipping the main menu
+luanti --address play.example.com --port 30000 --name Alice --go
+
+# Use a custom configuration file
+luanti --config ~/luanti-server.conf
+
+# List all worlds in the default user directory
+luanti --worldlist both
+
+# Migrate the map backend to LevelDB
+luanti --server --world /srv/luanti/worlds/myworld --migrate leveldb
+```

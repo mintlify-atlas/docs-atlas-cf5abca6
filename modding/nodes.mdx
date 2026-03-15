@@ -1,0 +1,499 @@
+---
+title: "Nodes"
+description: "In-depth reference for Luanti node definitions: drawtypes, tile specifications, groups, node metadata, paramtypes, and the node manipulation API."
+---
+
+Nodes are the fundamental building blocks of a Luanti world. Each node occupies exactly one cubic unit of space. The world is built from billions of them, stored efficiently by the engine.
+
+## Node representation
+
+In Lua, a node is a table with three fields:
+
+```lua
+{name = "default:stone", param1 = 0, param2 = 0}
+```
+
+- **`name`**: The registered item name of the node type.
+- **`param1`**: An 8-bit integer (0–255) whose meaning is determined by `paramtype`.
+- **`param2`**: An 8-bit integer (0–255) whose meaning is determined by `paramtype2`.
+
+Node definitions are stored in `core.registered_nodes[name]` after registration.
+
+## core.get_node() and core.set_node()
+
+The two most fundamental node manipulation functions:
+
+```lua
+-- Read a node
+local node = core.get_node(pos)
+-- Returns {name="default:stone", param1=0, param2=0}
+-- Returns {name="ignore", param1=0, param2=0} for unloaded areas
+
+-- Write a node (deletes any existing metadata)
+core.set_node({x=0, y=10, z=0}, {name="default:wood"})
+-- param1 and param2 default to 0 if omitted
+
+-- Swap a node without touching its metadata
+core.swap_node(pos, {name="default:stone"})
+
+-- Remove a node (sets it to air)
+core.remove_node(pos)
+
+-- Nil-safe variant (returns nil for unloaded areas)
+local node = core.get_node_or_nil(pos)
+if node then
+    -- node is loaded
+end
+```
+
+<Note>
+`core.get_node()` never returns `nil`. It returns `{name="ignore"}` for areas that are not loaded into memory. Use `core.get_node_or_nil()` when you need to distinguish unloaded areas.
+</Note>
+
+## Node definition fields
+
+Node definitions extend the [item definition](/modding/items) with node-specific fields:
+
+<Accordion title="Core appearance fields">
+```lua
+core.register_node("mymod:example", {
+    -- Inherited from item definition
+    description = "Example Node",
+    inventory_image = "",  -- defaults to 3D render of the node
+    groups = {cracky = 2},
+
+    -- Node-specific
+    drawtype = "normal",        -- see drawtypes section below
+    visual_scale = 1.0,         -- scale for plantlike, torchlike, etc.
+
+    tiles = {"top.png", "bottom.png", "side.png"},
+    -- Texture order: +Y, -Y, +X, -X, +Z, -Z (top, bottom, right, left, front, back)
+    -- List can be shortened; last entry repeats for remaining faces
+
+    overlay_tiles = {"top_overlay.png", "", "side_overlay.png"},
+    -- Drawn on top of tiles; empty string skips a face
+    -- Useful for hardware-colored parts (e.g. grass on dirt)
+
+    special_tiles = {"liquid_top.png", "liquid_side.png"},
+    -- Used by flowingliquid and a few other drawtypes
+
+    color = "#ffffff",          -- color multiplier (ColorSpec)
+    use_texture_alpha = "opaque", -- "opaque", "clip", or "blend"
+
+    paramtype  = "none",        -- determines param1 meaning
+    paramtype2 = "none",        -- determines param2 meaning
+
+    post_effect_color = "#00000000",  -- screen tint when inside this node
+})
+```
+</Accordion>
+
+<Accordion title="Physics and behavior fields">
+```lua
+{
+    walkable      = true,    -- objects collide with the node
+    pointable     = true,    -- can be pointed at (true/false/"blocking")
+    diggable      = true,    -- can be dug
+    climbable     = false,   -- can be climbed like a ladder
+    buildable_to  = false,   -- placed nodes replace this node
+    floodable     = false,   -- liquids flow into and replace this node
+    is_ground_content = true, -- caves/dungeons can carve through this
+    sunlight_propagates = false, -- sunlight passes through infinitely
+
+    move_resistance = 0,     -- slows movement through node (max 7)
+    drowning  = 0,           -- damage per step when no air bubbles remain
+    damage_per_second = 0,   -- damage while inside node
+    waving    = 0,           -- 1=plant, 2=leaves, 3=liquid waving effect
+
+    liquidtype = "none",     -- "none", "source", or "flowing"
+    liquid_alternative_flowing = "mymod:water_flowing",
+    liquid_alternative_source  = "mymod:water_source",
+    liquid_viscosity  = 0,   -- 0=fastest, 7=slowest
+    liquid_renewable  = true,
+    liquid_range      = 8,   -- max spread distance
+}
+```
+</Accordion>
+
+<Accordion title="Drop configuration">
+```lua
+{
+    -- Simple: drop a specific item
+    drop = "mymod:cobblestone",
+
+    -- Advanced: multiple items with chances and tool filtering
+    drop = {
+        max_items = 1,  -- stop after dropping this many item lists
+        items = {
+            {
+                -- 1/1000 chance
+                rarity = 1000,
+                items = {"default:diamond"},
+            },
+            {
+                -- Only drop when using specific tools
+                tool_groups = {{"pickaxe", "lucky"}},
+                items = {"mymod:rare_gem"},
+            },
+            {
+                -- Default drop
+                items = {"mymod:cobblestone"},
+            },
+        },
+    },
+}
+```
+</Accordion>
+
+## Node drawtypes
+
+The `drawtype` field controls how a node is rendered.
+
+<CardGroup cols={2}>
+  <Card title="normal" icon="cube">
+    A standard solid cube. The most common drawtype.
+  </Card>
+  <Card title="airlike" icon="wind">
+    Invisible, uses no texture. Used for air and similar intangible nodes.
+  </Card>
+  <Card title="liquid" icon="droplet">
+    Cubic source node for a liquid. Faces bordering the same liquid type are hidden.
+  </Card>
+  <Card title="flowingliquid" icon="water">
+    Flowing liquid with variable height and slopes. Uses `special_tiles` for textures.
+  </Card>
+  <Card title="glasslike" icon="square">
+    Shows only external faces. Used for glass and semi-transparent blocks.
+  </Card>
+  <Card title="glasslike_framed" icon="border-all">
+    Connected glass: adjacent nodes merge into one framed volume. Uses two tiles.
+  </Card>
+  <Card title="allfaces_optional" icon="leaf">
+    Switches between `normal`, `glasslike`, and `allfaces` based on the "Leaves" setting. Used for foliage.
+  </Card>
+  <Card title="plantlike" icon="seedling">
+    Two diagonal textures forming an X shape. Used for grass, flowers, saplings.
+  </Card>
+  <Card title="torchlike" icon="fire">
+    Single vertical texture with wallmounted placement support.
+  </Card>
+  <Card title="nodebox" icon="shapes">
+    Arbitrary boxes. Used for stairs, slabs, fences, and custom shapes.
+  </Card>
+  <Card title="mesh" icon="triangle">
+    Uses a 3D model file (.obj, .b3d, .gltf). Only static meshes are supported.
+  </Card>
+  <Card title="fencelike" icon="grip-lines-vertical">
+    A fence post that auto-connects to adjacent fence nodes.
+  </Card>
+</CardGroup>
+
+```lua
+-- Liquid node example
+core.register_node("mymod:water_source", {
+    description = "Water Source",
+    drawtype = "liquid",
+    tiles = {{name = "mymod_water.png", animation = {
+        type = "vertical_frames",
+        aspect_w = 16, aspect_h = 16,
+        length = 2.0,
+    }}},
+    special_tiles = {{name = "mymod_water.png", backface_culling = false}},
+    paramtype = "light",
+    liquidtype = "source",
+    liquid_alternative_flowing = "mymod:water_flowing",
+    liquid_alternative_source  = "mymod:water_source",
+    liquid_viscosity = 1,
+    post_effect_color = {a=103, r=30, g=60, b=90},
+    groups = {water=3, liquid=3, puts_out_fire=1},
+})
+
+-- Plantlike node example
+core.register_node("mymod:grass", {
+    description = "Grass",
+    drawtype = "plantlike",
+    tiles = {"mymod_grass.png"},
+    paramtype = "light",
+    sunlight_propagates = true,
+    walkable = false,
+    buildable_to = true,
+    groups = {snappy = 3, flammable = 2, attached_node = 1},
+})
+```
+
+## Tile definitions
+
+Tiles can be specified as a string (simple) or a table (with options):
+
+```lua
+tiles = {
+    -- Simple string
+    "mymod_stone.png",
+
+    -- With options
+    {
+        name = "mymod_stone.png",
+        backface_culling = true,  -- default: true for most nodes
+        align_style = "world",    -- "node", "world", or "user"
+        scale = 2,                -- texture spans this many nodes (world-aligned only)
+    },
+
+    -- With color multiplier
+    {name = "mymod_stone.png", color = "#80ff80"},
+
+    -- Animated tile
+    {name = "mymod_lava.png", animation = {
+        type = "vertical_frames",
+        aspect_w = 16,
+        aspect_h = 16,
+        length = 3.0,  -- full loop length in seconds
+    }},
+}
+```
+
+## paramtype and paramtype2
+
+The `param1` and `param2` integers stored with each node have meanings determined by these fields.
+
+<Tabs>
+  <Tab title="paramtype (param1)">
+    | Value | Meaning |
+    |-------|--------|
+    | `"none"` | Engine doesn't use param1; mod can store arbitrary values |
+    | `"light"` | Stores light levels (required for light sources and certain drawtypes like mesh, nodebox, torchlike) |
+  </Tab>
+  <Tab title="paramtype2 (param2)">
+    | Value | Meaning |
+    |-------|--------|
+    | `"none"` | Engine doesn't use param2 |
+    | `"facedir"` | 24-rotation orientation (for chests, furnaces) |
+    | `"4dir"` | 4-rotation horizontal orientation |
+    | `"wallmounted"` | 6-direction mounting (for torches, signs) |
+    | `"leveled"` | Variable height for leveled nodeboxes |
+    | `"degrotate"` | Fine-grained rotation (0–239 steps of 1.5°) |
+    | `"color"` | 256-color palette index |
+    | `"colorfacedir"` | Combined color (3 bits) + facedir (5 bits) |
+    | `"flowingliquid"` | Liquid level and flow direction |
+  </Tab>
+</Tabs>
+
+```lua
+-- A furnace that rotates when placed
+core.register_node("mymod:furnace", {
+    description = "Furnace",
+    tiles = {
+        "mymod_furnace_top.png",
+        "mymod_furnace_top.png",
+        "mymod_furnace_side.png",
+        "mymod_furnace_side.png",
+        "mymod_furnace_side.png",
+        "mymod_furnace_front.png",  -- front face
+    },
+    paramtype2 = "facedir",  -- allows 24-direction rotation
+    groups = {cracky = 2},
+})
+```
+
+## Node groups
+
+Groups control digging behavior and categorize nodes for recipes and logic.
+
+<Tabs>
+  <Tab title="Digging groups">
+    | Group | Meaning |
+    |-------|--------|
+    | `crumbly` | Dirt, sand — rating 1–3 (higher = faster) |
+    | `cracky` | Stone, hard materials |
+    | `snappy` | Leaves, plants, wire, metal sheets |
+    | `choppy` | Wood, trees |
+    | `fleshy` | Living things |
+    | `dig_immediate` | Instant dig: `2`=0.5s, `3`=0s |
+    | `oddly_breakable_by_hand` | Breakable by hand but not logically |
+  </Tab>
+  <Tab title="Behavior groups">
+    | Group | Meaning |
+    |-------|--------|
+    | `attached_node` | Falls if support node is removed |
+    | `falling_node` | Falls if nothing is below |
+    | `float` | Does not fall through liquids |
+    | `bouncy` | Value = bounce percent |
+    | `slippery` | Players slide on it |
+    | `level` | Tool level gating (higher = harder) |
+    | `disable_jump` | Prevents jumping off/in the node |
+    | `flammable` | Can be set on fire |
+  </Tab>
+  <Tab title="Examples">
+    ```lua
+    -- Standard dirt
+    groups = {crumbly = 3, soil = 1}
+
+    -- Stone with a level requirement
+    groups = {cracky = 1, level = 2}
+
+    -- Leaf node
+    groups = {snappy = 3, flammable = 2, leaves = 1, leafdecay = 3}
+
+    -- Torch-style attached node, instant dig
+    groups = {dig_immediate = 3, attached_node = 1, torch = 1}
+
+    -- Read a group rating
+    local rating = core.get_item_group("default:stone", "cracky")  -- returns 2
+    ```
+  </Tab>
+</Tabs>
+
+## Node callbacks
+
+Node definitions accept lifecycle and interaction callbacks:
+
+```lua
+core.register_node("mymod:magic_block", {
+    description = "Magic Block",
+    tiles = {"mymod_magic.png"},
+    groups = {cracky = 2},
+
+    on_construct = function(pos)
+        -- Called after node is placed. Set up metadata here.
+        local meta = core.get_meta(pos)
+        meta:set_string("owner", "")
+        meta:set_string("infotext", "Magic Block (unclaimed)")
+    end,
+
+    on_destruct = function(pos)
+        -- Called before node is removed
+    end,
+
+    after_place_node = function(pos, placer, itemstack, pointed_thing)
+        -- Called after on_construct when placed by a player or core.item_place_node
+        local meta = core.get_meta(pos)
+        local name = placer and placer:get_player_name() or ""
+        meta:set_string("owner", name)
+        meta:set_string("infotext", "Magic Block (owned by " .. name .. ")")
+    end,
+
+    on_rightclick = function(pos, node, clicker, itemstack, pointed_thing)
+        -- Called when a player right-clicks the node
+        core.chat_send_player(clicker:get_player_name(), "You clicked the magic block!")
+        return itemstack  -- return the (possibly modified) itemstack
+    end,
+
+    on_dig = function(pos, node, digger)
+        -- Override default digging behavior
+        -- default: core.node_dig (checks privs, wears tool, removes node)
+        local meta = core.get_meta(pos)
+        if meta:get_string("owner") == digger:get_player_name() then
+            core.node_dig(pos, node, digger)
+        else
+            core.chat_send_player(digger:get_player_name(), "You don't own this block!")
+        end
+    end,
+
+    can_dig = function(pos, player)
+        -- Return true if the node can be dug right now
+        return player and core.check_player_privs(player, {interact = true})
+    end,
+
+    on_punch = function(pos, node, puncher, pointed_thing)
+        -- Called when a player punches the node
+    end,
+
+    on_timer = function(pos, elapsed)
+        -- Called by a NodeTimer (see core.get_node_timer)
+        -- Return true to restart the timer with the same interval
+        return false
+    end,
+})
+```
+
+## Node metadata (NodeMetaRef)
+
+Each node can store an arbitrary key-value store and an inventory. Access it with `core.get_meta(pos)`.
+
+```lua
+-- Get the metadata object
+local meta = core.get_meta(pos)
+
+-- String values
+meta:set_string("owner", "singleplayer")
+local owner = meta:get_string("owner")  -- returns "" if not set
+
+-- Integer values
+meta:set_int("count", 5)
+local count = meta:get_int("count")
+
+-- Float values
+meta:set_float("energy", 3.14)
+local energy = meta:get_float("energy")
+
+-- Special keys
+meta:set_string("infotext", "Press right-click to open")  -- shown when pointed
+meta:set_string("formspec",   -- opens an inventory GUI on right-click
+    "size[8,9]" ..
+    "list[context;main;0,0;8,4;]" ..
+    "list[current_player;main;0,5;8,4;]")
+
+-- Node inventory
+local inv = meta:get_inventory()
+inv:set_size("main", 32)      -- create a 32-slot list named "main"
+inv:add_item("main", "default:stone 10")
+
+-- Dump all metadata as a table
+local data = meta:to_table()
+-- { fields = {key=val, ...}, inventory = {list_name = {itemstring,...}} }
+```
+
+<Tip>
+The `formspec` key in node metadata automatically opens a GUI when a player right-clicks the node, as long as no `on_rightclick` callback is defined.
+</Tip>
+
+## Nodebox drawtype
+
+Nodeboxes let you define nodes as arbitrary collections of boxes:
+
+```lua
+core.register_node("mymod:half_slab", {
+    description = "Half Slab",
+    drawtype = "nodebox",
+    tiles = {"mymod_stone.png"},
+    paramtype = "light",
+    node_box = {
+        type = "fixed",
+        fixed = {-0.5, -0.5, -0.5, 0.5, 0.0, 0.5},
+        -- {xmin, ymin, zmin, xmax, ymax, zmax} in node units
+        -- A full node is from -0.5 to +0.5 on each axis
+    },
+    groups = {cracky = 3},
+})
+
+-- Wallmounted torch example
+core.register_node("mymod:torch", {
+    description = "Torch",
+    drawtype = "torchlike",
+    tiles = {
+        "mymod_torch_on_floor.png",  -- on top of node
+        "mymod_torch_on_ceiling.png", -- on underside
+        "mymod_torch_on_wall.png",    -- on side
+    },
+    paramtype = "light",
+    paramtype2 = "wallmounted",
+    light_source = 12,
+    sunlight_propagates = true,
+    walkable = false,
+    groups = {dig_immediate = 3, attached_node = 1, torch = 1},
+})
+```
+
+## Node sounds
+
+You can define sounds that play when the node is walked on, dug, placed, or falls:
+
+```lua
+sounds = {
+    footstep = {name = "default_grass_footstep", gain = 0.25},
+    dig      = {name = "default_dig_crumbly",    gain = 0.5},
+    dug      = {name = "default_dirt_footstep",  gain = 1.0},
+    place    = {name = "default_place_node",      gain = 1.0},
+    fall     = {name = "default_falling_step",    gain = 0.5},
+}
+-- Or use dig = "__group" to auto-select based on dig group
+```

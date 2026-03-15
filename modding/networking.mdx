@@ -1,0 +1,253 @@
+---
+title: "Networking & Mod Channels"
+description: "Communicate between server mods and connected clients using Luanti's mod channel system — covering channel lifecycle, sending messages, and receiving events."
+---
+
+Luanti provides a **mod channel** system that lets server-side mods and client-side mods (CSMs) pass messages to each other over the network. Channels are named, publish/subscribe queues: a mod joins a channel on the server, clients can also join the same channel, and messages flow between them.
+
+<Note>
+Mod channels are a low-level messaging primitive. For most gameplay tasks — updating player inventory, showing a HUD, sending chat — you should use the dedicated APIs (`hud_change`, `chat_send_player`, etc.). Use mod channels when you need to synchronise custom state that has no dedicated API.
+</Note>
+
+## Architecture
+
+The communication model is:
+
+- **Server mod** → calls `core.mod_channel_join(channel_name)` to obtain a `ModChannel` object.
+- **Messages from server** are broadcast to all connected clients that have joined the same named channel.
+- **Messages from clients** arrive at the server via `core.register_on_modchannel_message`.
+- Messages are plain strings; you must serialise structured data yourself (e.g. with `core.serialize` / `core.deserialize` or JSON).
+
+You can find a communication diagram in `doc/mod_channels.png` inside the Luanti source tree.
+
+## Server-side API
+
+### Joining a channel
+
+```lua
+-- Returns a ModChannel object
+local channel = core.mod_channel_join("mymod:events")
+```
+
+`core.mod_channel_join` creates the channel if it does not exist and subscribes the server mod to it. It returns a [`ModChannel`](#modchannel-object) object used to send messages and manage the subscription.
+
+### Receiving messages from clients
+
+```lua
+core.register_on_modchannel_message(function(channel_name, sender, message)
+    if channel_name ~= "mymod:events" then return end
+
+    if sender == "" then
+        -- Message originated from another server mod
+        core.log("Server message: " .. message)
+    else
+        -- sender is the player name
+        core.log("From " .. sender .. ": " .. message)
+    end
+end)
+```
+
+`sender` is the player name if the message came from a client-side mod, or an empty string `""` if it came from another server mod.
+
+## `ModChannel` object
+
+The object returned by `core.mod_channel_join` has the following methods:
+
+### `channel:send_all(message)`
+
+Broadcasts a string message to all clients subscribed to this channel.
+
+```lua
+channel:send_all("player_scored:Alice:100")
+```
+
+Messages are capped at **65,535 characters** by the protocol. If the channel is not writable (e.g. after calling `leave()`), the message is silently dropped.
+
+### `channel:is_writeable()`
+
+Returns `true` if the channel is still open and writable.
+
+```lua
+if channel:is_writeable() then
+    channel:send_all("ping")
+end
+```
+
+### `channel:leave()`
+
+Unsubscribes the server from the channel. After this call the `ModChannel` object is invalid — set it to `nil` to free resources.
+
+```lua
+channel:leave()
+channel = nil
+```
+
+<Warning>
+Do not call any methods on a `ModChannel` object after calling `leave()`. Set the variable to `nil` immediately to avoid accidental reuse.
+</Warning>
+
+## Serialising data
+
+Mod channel messages are plain strings. Use Luanti's built-in serialisation helpers for structured payloads:
+
+```lua
+-- Sending a table
+local payload = core.serialize({
+    event  = "item_dropped",
+    item   = "default:diamond",
+    pos    = {x = 10, y = 64, z = -5},
+    player = name,
+})
+channel:send_all(payload)
+
+-- Receiving and deserialising
+core.register_on_modchannel_message(function(channel_name, sender, message)
+    if channel_name ~= "mymod:events" then return end
+    local data = core.deserialize(message)
+    if data and data.event == "item_dropped" then
+        core.log("Diamond dropped by " .. data.player)
+    end
+end)
+```
+
+## Complete example: server-to-client event bus
+
+This example broadcasts a `"world_event"` channel message whenever any player digs a diamond, allowing a client-side mod to react.
+
+```lua
+-- server-side mod: mymod/init.lua
+local event_channel = core.mod_channel_join("mymod:world_events")
+
+core.register_on_dignode(function(pos, oldnode, digger)
+    if not digger or not digger:is_player() then return end
+    if oldnode.name ~= "default:stone_with_diamond" then return end
+
+    local name = digger:get_player_name()
+    local payload = core.serialize({
+        type   = "diamond_dug",
+        player = name,
+        pos    = pos,
+    })
+    if event_channel:is_writeable() then
+        event_channel:send_all(payload)
+    end
+end)
+
+-- Clean up on shutdown
+core.register_on_shutdown(function()
+    if event_channel and event_channel:is_writeable() then
+        event_channel:leave()
+        event_channel = nil
+    end
+end)
+```
+
+A CSM counterpart would call the equivalent client-side `core.mod_channel_join` and register `core.register_on_modchannel_message` to receive those events.
+
+## Sending targeted messages
+
+Mod channels broadcast to **all** subscribed clients. There is no built-in unicast. To send a message to a single player, you have two options:
+
+1. **Include the target player name in the payload** and have each client ignore messages not addressed to it.
+2. **Use a player-specific channel name** such as `"mymod:player_" .. name`.
+
+```lua
+-- Option 1: named target in payload
+local payload = core.serialize({
+    target  = "Alice",
+    message = "Secret info",
+})
+channel:send_all(payload)
+
+-- CSM side: filter by target
+core.register_on_modchannel_message(function(ch, sender, raw)
+    local data = core.deserialize(raw)
+    if data and data.target == core.localplayer:get_name() then
+        -- handle the message
+    end
+end)
+```
+
+## Client-side mod restrictions
+
+Client-side mods (CSMs) run in the Luanti client with significantly restricted access compared to server mods:
+
+<CardGroup cols={2}>
+  <Card title="CSMs can">
+    - Join mod channels with `core.mod_channel_join`
+    - Send messages to server via a channel
+    - Register `core.register_on_modchannel_message`
+    - Read limited world data (`core.get_node_or_nil` near the player)
+    - Access `core.localplayer`
+  </Card>
+  <Card title="CSMs cannot">
+    - Modify the world map
+    - Access server-side inventories
+    - Read other players' data
+    - Load arbitrary files
+    - Access the network other than via mod channels
+  </Card>
+</CardGroup>
+
+<Warning>
+Server operators control which CSM capabilities are enabled. Your CSM code should degrade gracefully if a capability is unavailable, and should never rely on CSM access for security-sensitive logic — all authoritative checks must happen server-side.
+</Warning>
+
+## Common patterns
+
+<Accordion title="Heartbeat keepalive">
+Some mods send a periodic ping to detect disconnected subscribers:
+
+```lua
+local channel = core.mod_channel_join("mymod:sync")
+
+core.register_globalstep(function(dtime)
+    -- (throttle this in production using an accumulator)
+end)
+
+local timer = 0
+core.register_globalstep(function(dtime)
+    timer = timer + dtime
+    if timer >= 30 then
+        timer = 0
+        if channel:is_writeable() then
+            channel:send_all(core.serialize({type="heartbeat",
+                time=os.time()}))
+        end
+    end
+end)
+```
+</Accordion>
+
+<Accordion title="Bidirectional sync">
+```lua
+-- server: push initial state when a player joins
+core.register_on_joinplayer(function(player)
+    local name = player:get_player_name()
+    local state = get_server_state()  -- your own function
+    -- Channels broadcast to all; include target name for filtering
+    if channel:is_writeable() then
+        channel:send_all(core.serialize({
+            type   = "init_state",
+            target = name,
+            state  = state,
+        }))
+    end
+end)
+
+-- server: handle update requests from clients
+core.register_on_modchannel_message(function(ch, sender, msg)
+    if ch ~= "mymod:sync" then return end
+    local data = core.deserialize(msg)
+    if data and data.type == "request_update" and sender ~= "" then
+        -- respond to sender
+        local state = get_server_state()
+        channel:send_all(core.serialize({
+            type   = "state_update",
+            target = sender,
+            state  = state,
+        }))
+    end
+end)
+```
+</Accordion>

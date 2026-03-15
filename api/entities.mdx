@@ -1,0 +1,309 @@
+---
+title: "Entity API"
+description: "Reference for Lua entities and ObjectRef methods in Luanti: spawning, querying, and controlling moving objects in the world."
+---
+
+Entities are moving objects in the Luanti world: players, Lua entities (mobs, projectiles, dropped items), and internal engine objects. They are all accessed through `ObjectRef`.
+
+## Spawning entities
+
+<ParamField path="core.add_entity(pos, name[, staticdata])" type="function">
+  Spawns a Lua-defined entity at `pos`.
+
+  - `pos` (vector): Spawn position.
+  - `name` (string): Registered entity name, e.g. `"mymod:zombie"`.
+  - `staticdata` (string, optional): Passed to the entity's `on_activate` callback.
+
+  **Returns:** `ObjectRef` on success, `nil` on failure.
+
+  Entities with `static_save = true` can be added to unloaded and non-generated blocks.
+</ParamField>
+
+<ParamField path="core.add_item(pos, item)" type="function">
+  Spawns an item entity at `pos`.
+
+  - `pos` (vector): Spawn position.
+  - `item` (ItemStack or string): The item to drop.
+
+  **Returns:** `ObjectRef` or `nil`.
+</ParamField>
+
+## Querying objects
+
+<ParamField path="core.get_object_by_id(id)" type="function">
+  Returns the `ObjectRef` for the object with the given active object ID, or `nil`.
+
+  <Note>Prefer using `core.objects_by_guid` (indexed by GUID) over `core.object_refs` (indexed by ID). GUIDs are more stable and useful.</Note>
+</ParamField>
+
+<ParamField path="core.get_objects_inside_radius(center, radius)" type="function">
+  Returns a list of `ObjectRef`s within `radius` nodes of `center` (Euclidean metric).
+
+  <Warning>Objects in the list can become invalid while you iterate if any action removes them (e.g. punching an entity removes its children). Use `core.objects_inside_radius` instead for safe iteration.</Warning>
+</ParamField>
+
+<ParamField path="core.objects_inside_radius(center, radius)" type="function">
+  Returns an iterator of valid `ObjectRef`s within `radius` nodes of `center`. Transparently handles invalidation during iteration.
+
+  ```lua
+  for obj in core.objects_inside_radius(pos, 10) do
+      obj:punch(nil, nil, {damage_groups={fleshy=1}})
+  end
+  ```
+</ParamField>
+
+<ParamField path="core.get_objects_in_area(min_pos, max_pos)" type="function">
+  Returns a list of `ObjectRef`s within the axis-aligned bounding box. Subject to the same warning as `get_objects_inside_radius`. Use `core.objects_in_area` for safe iteration.
+</ParamField>
+
+## ObjectRef methods (common to all objects)
+
+All methods apply to players and Lua entities unless noted.
+
+### Validity and identity
+
+<ResponseField name="object:is_valid()" type="boolean">
+  Returns `true` if the object is still valid. Objects become invalid when removed or unloaded. Getters called on invalid objects return nothing; do not call other methods on invalid objects.
+</ResponseField>
+
+<ResponseField name="object:is_player()" type="boolean">
+  Returns `true` for players, `false` for Lua entities.
+</ResponseField>
+
+<ResponseField name="object:get_guid()" type="string">
+  Returns the object's globally unique identifier. For players this is the player name; for Lua entities it is a generated string like `"@bGh3p2AbRE29Mb4biqX6OA"`. GUIDs persist between object reloads. Available since 5.13.0.
+</ResponseField>
+
+### Position
+
+<ResponseField name="object:get_pos()" type="vector">
+  Returns the object's position.
+</ResponseField>
+
+<ResponseField name="object:set_pos(pos)" type="nil">
+  Sets the object's position. No-op if attached to another object.
+</ResponseField>
+
+<ResponseField name="object:add_pos(pos)" type="nil">
+  Moves the object by adding `pos` to its current position. Preferred over `set_pos` to avoid sync issues.
+</ResponseField>
+
+<ResponseField name="object:move_to(pos, continuous)" type="nil">
+  Interpolated move for smooth visual transitions on Lua entities. For players, equivalent to `set_pos`. `continuous` prevents resetting to current position before the interpolated move.
+</ResponseField>
+
+### Velocity
+
+<ResponseField name="object:get_velocity()" type="vector">
+  Returns the velocity vector.
+</ResponseField>
+
+<ResponseField name="object:add_velocity(vel)" type="nil">
+  Adds `vel` to the current velocity. Preferred method for changing velocity.
+</ResponseField>
+
+### Health
+
+<ResponseField name="object:get_hp()" type="number">
+  Returns the current HP value.
+</ResponseField>
+
+<ResponseField name="object:set_hp(hp, reason)" type="nil">
+  Sets HP. `reason` is an optional `PlayerHPChangeReason` table.
+</ResponseField>
+
+### Combat
+
+<ResponseField name="object:punch(puncher, time_from_last_punch, tool_capabilities, dir)" type="nil">
+  Punches the object with full combat consequences.
+
+  - `puncher` (ObjectRef or nil): The punching object.
+  - `time_from_last_punch` (number or nil): Time since last punch (prevents spam).
+  - `tool_capabilities` (table or nil): Capabilities of the used item.
+  - `dir` (vector or nil): Direction from puncher to punched.
+</ResponseField>
+
+<ResponseField name="object:right_click(clicker)" type="nil">
+  Simulates using the 'place/use' key on the object.
+</ResponseField>
+
+### Armor and properties
+
+<ResponseField name="object:get_armor_groups()" type="table">
+  Returns a table of armor group ratings, e.g. `{fleshy=100}`.
+</ResponseField>
+
+<ResponseField name="object:set_armor_groups(groups)" type="nil">
+  Sets all armor groups. Any group not in the table is removed.
+</ResponseField>
+
+<ResponseField name="object:get_properties()" type="table">
+  Returns all current object properties.
+</ResponseField>
+
+<ResponseField name="object:set_properties(table)" type="nil">
+  Updates object properties. Only the fields you provide are changed.
+</ResponseField>
+
+### Animation
+
+<ResponseField name="object:set_animation(frame_range, frame_speed, frame_blend, frame_loop)" type="nil">
+  Sets and starts an animation. Only works with `"mesh"` visual.
+
+  - `frame_range` (table): `{x=start_frame, y=end_frame}`.
+  - `frame_speed` (number): Frames per second. Default `15.0`.
+  - `frame_blend` (number): Default `0.0`.
+  - `frame_loop` (boolean): Whether to loop. Default `true`.
+</ResponseField>
+
+### Attachments
+
+<ResponseField name="object:set_attach(parent[, bone, position, rotation, forced_visible])" type="nil">
+  Attaches the object to `parent`. Position and rotation are relative to the parent (or bone). Note: relative position must be multiplied by 10 compared to world positions.
+</ResponseField>
+
+<ResponseField name="object:set_detach()" type="nil">
+  Detaches the object from its parent.
+</ResponseField>
+
+<ResponseField name="object:get_attach()" type="multiple">
+  Returns `parent, bone, position, rotation, forced_visible` if attached, or `nil`.
+</ResponseField>
+
+### Nametag
+
+<ResponseField name="object:set_nametag_attributes(attributes)" type="nil">
+  Sets the nametag displayed above the object.
+
+  ```lua
+  object:set_nametag_attributes({
+      text    = "Boss",
+      color   = {r=255, g=0, b=0, a=255},
+      bgcolor = false,  -- auto background
+  })
+  ```
+</ResponseField>
+
+## Lua entity-only methods
+
+These methods are no-ops or unavailable for players.
+
+<ResponseField name="entity:remove()" type="nil">
+  Removes the entity from the world. The `ObjectRef` becomes unusable immediately.
+</ResponseField>
+
+<ResponseField name="entity:set_velocity(vel)" type="nil">
+  Sets the velocity vector directly.
+</ResponseField>
+
+<ResponseField name="entity:set_acceleration(acc)" type="nil">
+  Sets the acceleration vector.
+</ResponseField>
+
+<ResponseField name="entity:get_acceleration()" type="vector">
+  Returns the current acceleration.
+</ResponseField>
+
+<ResponseField name="entity:set_rotation(rot)" type="nil">
+  Sets rotation in radians. X is pitch (elevation), Y is yaw (heading), Z is roll (bank).
+</ResponseField>
+
+<ResponseField name="entity:get_rotation()" type="vector">
+  Returns rotation in radians.
+</ResponseField>
+
+<ResponseField name="entity:get_luaentity()" type="table">
+  Returns the Lua table associated with this entity (its "self"), or `nil` for players.
+</ResponseField>
+
+## Entity definition
+
+Register a Lua entity with `core.register_entity(name, def)`. The definition table becomes a metatable shared by all instances.
+
+```lua
+core.register_entity("mymod:ball", {
+    initial_properties = {
+        visual       = "sprite",
+        textures     = {"mymod_ball.png"},
+        physical     = true,
+        collisionbox = {-0.2, -0.2, -0.2, 0.2, 0.2, 0.2},
+    },
+
+    on_activate = function(self, staticdata, dtime_s)
+        -- Called when the entity is spawned or loaded
+    end,
+
+    on_step = function(self, dtime, moveresult)
+        -- Called every server step (~0.1 s)
+        -- moveresult.touching_ground, .collisions, etc.
+    end,
+
+    on_punch = function(self, puncher, time_from_last_punch, tool_capabilities, dir, damage)
+        -- Called when punched; return true to cancel default damage
+    end,
+
+    on_death = function(self, killer)
+        -- Called when HP reaches 0
+    end,
+
+    on_rightclick = function(self, clicker)
+        -- Called on right-click
+    end,
+
+    get_staticdata = function(self)
+        -- Return a string to persist across map saves
+        return core.serialize({health = self.health})
+    end,
+})
+```
+
+### Entity callbacks
+
+<Accordion title="on_activate(self, staticdata, dtime_s)">
+  Called when the entity is activated (spawned or loaded from the map).
+  - `staticdata`: String returned by the last `get_staticdata()` call, or `""` for new entities.
+  - `dtime_s`: Time elapsed since the entity was last active, in seconds.
+</Accordion>
+
+<Accordion title="on_step(self, dtime, moveresult)">
+  Called every server step (~0.1 s) while the entity's mapblock is active.
+  - `dtime`: Time since the last step in seconds.
+  - `moveresult`: Collision information table with fields:
+    - `touching_ground` (boolean)
+    - `collides` (boolean)
+    - `collisions` (table of `{type, axis, node_pos, object, new_pos, old_velocity, new_velocity}`)
+</Accordion>
+
+<Accordion title="on_punch(self, puncher, time_from_last_punch, tool_capabilities, dir, damage)">
+  Called when the entity is punched. Return `true` to prevent the default damage mechanism.
+</Accordion>
+
+<Accordion title="on_death(self, killer)">
+  Called when the entity dies. `killer` is an `ObjectRef` or `nil`.
+</Accordion>
+
+<Accordion title="get_staticdata(self)">
+  Should return a string for persistence. Passed back to `on_activate` when the entity is re-loaded.
+</Accordion>
+
+## Object properties
+
+Object properties control appearance and physics. Set them via `initial_properties` in the definition or `object:set_properties()` at runtime.
+
+<Expandable title="Key object property fields">
+  | Field | Type | Description |
+  |---|---|---|
+  | `hp_max` | number | Maximum HP (default 10 for entities, 20 for players) |
+  | `physical` | boolean | Collide with walkable nodes |
+  | `collisionbox` | table | `{xmin, ymin, zmin, xmax, ymax, zmax}` |
+  | `selectionbox` | table | Selection box for pointing; copies collisionbox if unset |
+  | `visual` | string | `"cube"`, `"sprite"`, `"upright_sprite"`, `"mesh"`, `"wielditem"`, `"node"` |
+  | `visual_size` | vector | Size multiplier |
+  | `textures` | table | List of texture names |
+  | `mesh` | string | Mesh filename when `visual = "mesh"` |
+  | `glow` | number | Extra light emission |
+  | `static_save` | boolean | Whether to persist across map saves (default `true`) |
+  | `nametag` | string | Text shown above the object |
+  | `automatic_rotate` | number | Constant Y-axis rotation in rad/s |
+  | `stepheight` | number | Auto-step height in nodes |
+</Expandable>

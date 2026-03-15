@@ -1,0 +1,268 @@
+---
+title: "Client-Side Lua API Overview"
+description: "Learn how Client-Side Mods (CSMs) work in Luanti, how to enable them, configure restrictions, and structure your clientmods/ directory."
+---
+
+## What are Client-Side Mods?
+
+Client-Side Mods (CSMs) are Lua scripts that run inside the Luanti **game client** rather than on the server. Unlike server-side mods, which run in the server environment and can manipulate world state, CSMs operate within the client process and interact with what the local player sees, hears, and inputs.
+
+<Info>
+The client API is currently **unstable** and may break or change without warning between releases. Design your CSMs with this in mind.
+</Info>
+
+### How CSMs differ from server-side mods
+
+| Aspect | Server-side mod | Client-side mod (CSM) |
+|---|---|---|
+| Runs on | Server process | Client process |
+| Can modify world state | Yes | No |
+| Can read map nodes | Yes (full world) | Yes (loaded chunks only, subject to restrictions) |
+| Can provide textures/sounds | Yes | No — media must already be loaded from the server |
+| Loaded automatically for all players | Yes | Only when the player opts in locally |
+| Transferred from server to client | N/A | Not yet implemented |
+
+<Warning>
+Client mods currently **cannot provide textures, sounds, or models** by themselves. Any media referenced in function calls must already be present — loaded by mods that exist on the server.
+</Warning>
+
+---
+
+## Enabling Client-Side Mods
+
+Two conditions must both be satisfied for CSMs to load:
+
+**1. Enable client modding in `minetest.conf`**
+
+Add the following line to your `minetest.conf` file:
+
+```ini
+enable_client_modding = true
+```
+
+**2. Activate individual mods in `mods.conf`**
+
+For each mod you want to load, add an entry to `$path_user/clientmods/mods.conf`:
+
+```ini
+load_mod_mymodname = true
+```
+
+<Note>
+Depending on the remote server's settings, client-side mods may not load at all, or may have limited functionality. See the `csm_restriction_flags` setting for details.
+</Note>
+
+---
+
+## Directory Structure
+
+Client mods live under the `clientmods/` directory. Luanti searches the following locations, in order:
+
+```
+$path_share/clientmods/          # Shared/system mods
+$path_user/clientmods/           # User-installed mods  ← install here
+```
+
+On a Linux install, these resolve to:
+
+```bash
+/usr/share/minetest/clientmods/
+~/.minetest/clientmods/          # your mods go here
+```
+
+On a Windows run-in-place build:
+
+```
+minetest/clientmods/
+```
+
+### Mod directory layout
+
+Each mod follows this structure:
+
+```
+clientmods/
+├── mymod/
+│   ├── mod.conf      # mod metadata (optional)
+│   └── init.lua      # main script (required)
+└── another_mod/
+    ├── mod.conf
+    └── init.lua
+```
+
+### `mod.conf`
+
+The optional `mod.conf` file provides metadata about your mod:
+
+```ini
+name = mymod
+description = Does something useful on the client side
+depends = someothermod
+optional_depends = yetanothermod
+```
+
+<ResponseField name="name" type="string">
+  The mod name. Lets Luanti determine the mod name even if the folder is misnamed.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  A human-readable description shown in the Mods tab of the main menu.
+</ResponseField>
+
+<ResponseField name="depends" type="string">
+  Comma-separated list of mods that **must** be loaded before this mod.
+</ResponseField>
+
+<ResponseField name="optional_depends" type="string">
+  Comma-separated list of optional dependencies. No error is raised if they don't exist.
+</ResponseField>
+
+### `init.lua`
+
+This is the entry point for your mod. Luanti runs it once at load time. You register all callbacks, commands, and other hooks here. After load, Luanti drives execution by calling the registered callbacks.
+
+```lua
+-- clientmods/mymod/init.lua
+
+core.register_on_receiving_chat_message(function(message)
+    -- intercept incoming chat messages
+    core.display_chat_message("[mymod] Received: " .. message)
+    return false  -- don't suppress the original message
+end)
+```
+
+---
+
+## Modpack Support
+
+You can group mods into a modpack by placing them in a subdirectory and adding a `modpack.conf` file to the parent:
+
+```
+clientmods/
+└── my_modpack/
+    ├── modpack.conf   # marks this as a modpack
+    ├── mod_a/
+    │   └── init.lua
+    └── mod_b/
+        └── init.lua
+```
+
+```ini
+# modpack.conf
+name = my_modpack
+description = A collection of client-side utilities
+```
+
+---
+
+## Naming Conventions
+
+Registered names (for chatcommands, etc.) must follow this format:
+
+```
+modname:<identifier>
+```
+
+Where `<identifier>` contains only characters `a-zA-Z0-9_`. For example:
+
+```lua
+core.register_chatcommand("mymod:hello", {
+    description = "Say hello",
+    func = function(param)
+        core.display_chat_message("Hello!")
+    end,
+})
+```
+
+You can override another mod's registered name by prefixing with `:`:
+
+```lua
+-- Override experimental:tnt (requires experimental as a dependency)
+:experimental:tnt
+```
+
+---
+
+## CSM Restriction Flags
+
+Server operators control what CSMs can do using the `csm_restriction_flags` setting. You can inspect which restrictions apply to your mod at runtime:
+
+```lua
+local restrictions = core.get_csm_restrictions()
+
+if restrictions.read_playerinfo then
+    core.display_chat_message("Player list is restricted on this server.")
+end
+```
+
+The returned table has the following flags. When a flag is `true`, that feature is **restricted**:
+
+<ResponseField name="load_client_mods" type="boolean">
+  Client-side mods are blocked entirely.
+</ResponseField>
+
+<ResponseField name="chat_messages" type="boolean">
+  Access to chat messages is restricted.
+</ResponseField>
+
+<ResponseField name="read_itemdefs" type="boolean">
+  Reading item definitions via `core.get_item_def()` is restricted.
+</ResponseField>
+
+<ResponseField name="read_nodedefs" type="boolean">
+  Reading node definitions via `core.get_node_def()` is restricted.
+</ResponseField>
+
+<ResponseField name="lookup_nodes" type="boolean">
+  Looking up map nodes via `core.get_node_or_nil()` is restricted.
+</ResponseField>
+
+<ResponseField name="read_playerinfo" type="boolean">
+  Reading the player list via `core.get_player_names()` is restricted.
+</ResponseField>
+
+---
+
+## Security Model and Limitations
+
+CSMs run in a **shared Lua environment** — all loaded client mods share the same global namespace. Keep the following in mind:
+
+- Use the `modname:` prefix convention to avoid name collisions.
+- Mods are loaded by running `init.lua` at startup; further execution happens only through registered callbacks.
+- The client API does **not** have access to the full server-side API. Many `lua_api.md` features are unavailable or have CSM-specific variants.
+- You cannot write arbitrary files or execute system commands from a CSM.
+- Mod storage is scoped per-mod: use `core.get_mod_storage()` (call at load time only) to persist data.
+
+```lua
+-- Persist data across sessions
+local storage = core.get_mod_storage()  -- must call at load time
+
+local count = tonumber(storage:get("visit_count")) or 0
+count = count + 1
+storage:set("visit_count", tostring(count))
+```
+
+### Crash behavior
+
+<Warning>
+If the client crashes abnormally, shutdown callbacks registered with `core.register_on_shutdown()` will likely **not** run. Save important data at regular intervals during `core.register_globalstep()`, not only on shutdown.
+</Warning>
+
+---
+
+## Path Variables
+
+Use these variables to build portable file paths:
+
+```lua
+-- Load an additional Lua file from your mod directory
+dofile(core.get_modpath(core.get_current_modname()) .. "helpers.lua")
+```
+
+<ResponseField name="core.get_modpath(modname)" type="string">
+  Returns the virtual path to the mod directory, including a trailing separator. Use this to load additional Lua files from your mod.
+</ResponseField>
+
+<ResponseField name="core.get_current_modname()" type="string">
+  Returns the name of the mod currently being loaded. Only meaningful during `init.lua` execution.
+</ResponseField>
