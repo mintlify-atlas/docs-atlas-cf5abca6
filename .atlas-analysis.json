@@ -1,0 +1,198 @@
+{
+  "projectType": "framework",
+  "projectName": "Luanti",
+  "projectDescription": "Luanti (formerly Minetest) is a free, open-source voxel game engine with an easy-to-use Lua modding and game creation platform.",
+  "theme": "palm",
+  "primaryColor": "#d3b656",
+  "lightColor": "#518537",
+  "darkColor": "#f0f0f0",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Getting Started",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "controls"
+            ]
+          },
+          {
+            "group": "Building from Source",
+            "pages": [
+              "compiling/overview",
+              "compiling/linux",
+              "compiling/windows",
+              "compiling/macos"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/command-line",
+              "configuration/paths"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Modding & Games",
+        "groups": [
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "modding/overview",
+              "modding/mod-structure",
+              "modding/naming-conventions",
+              "modding/modpacks"
+            ]
+          },
+          {
+            "group": "Game Creation",
+            "pages": [
+              "games/overview",
+              "games/game-conf",
+              "games/menu-images"
+            ]
+          },
+          {
+            "group": "Lua Scripting",
+            "pages": [
+              "modding/lua-basics",
+              "modding/registering-content",
+              "modding/nodes",
+              "modding/items",
+              "modding/entities",
+              "modding/mapgen"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "modding/formspecs",
+              "modding/hud",
+              "modding/networking",
+              "modding/textures",
+              "modding/sounds",
+              "modding/translations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Server Lua API",
+            "pages": [
+              "api/lua-api-overview",
+              "api/core-namespace",
+              "api/nodes",
+              "api/items",
+              "api/players",
+              "api/entities",
+              "api/mapgen-api",
+              "api/settings",
+              "api/callbacks"
+            ]
+          },
+          {
+            "group": "Client Lua API",
+            "pages": [
+              "api/client-api-overview",
+              "api/client-callbacks",
+              "api/client-functions"
+            ]
+          },
+          {
+            "group": "Main Menu API",
+            "pages": [
+              "api/mainmenu-api"
+            ]
+          },
+          {
+            "group": "World Format",
+            "pages": [
+              "api/world-format"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Server & Deployment",
+        "groups": [
+          {
+            "group": "Running a Server",
+            "pages": [
+              "server/overview",
+              "server/configuration",
+              "server/privileges",
+              "server/worlds"
+            ]
+          },
+          {
+            "group": "Docker",
+            "pages": [
+              "server/docker"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/code-style",
+              "contributing/profiling"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Voxel game engine built in C++ with Lua scripting support",
+    "Easy mod and game creation via the Lua API",
+    "Multiplayer support with client-server architecture",
+    "Procedural map generation with multiple mapgen algorithms",
+    "ContentDB for community mods, games, and texture packs",
+    "Cross-platform: Linux, Windows, macOS, Android",
+    "Formspec UI system for building in-game interfaces",
+    "Support for SQLite, LevelDB, PostgreSQL, and Redis map backends"
+  ],
+  "publicApiSurface": [
+    "core.register_node(name, def)",
+    "core.register_item(name, def)",
+    "core.register_craftitem(name, def)",
+    "core.register_entity(name, def)",
+    "core.register_abm(def)",
+    "core.register_lbm(def)",
+    "core.register_mapgen_script(path)",
+    "core.register_on_player_receive_fields(func)",
+    "core.register_on_joinplayer(func)",
+    "core.register_on_leaveplayer(func)",
+    "core.register_on_respawnplayer(func)",
+    "core.register_on_dieplayer(func)",
+    "core.register_craft(recipe)",
+    "core.register_alias(alias, original)",
+    "core.register_biome(def)",
+    "core.register_decoration(def)",
+    "core.register_ore(def)",
+    "core.register_schematic(schematic)",
+    "core.register_privilege(name, def)",
+    "core.register_chatcommand(name, def)",
+    "core.register_globalstep(func)",
+    "core.get_node(pos)",
+    "core.set_node(pos, node)",
+    "core.get_meta(pos)",
+    "core.get_player_by_name(name)",
+    "core.get_connected_players()",
+    "core.find_nodes_in_area(minp, maxp, nodenames)",
+    "core.emerge_area(pos1, pos2, callback)",
+    "core.get_mapgen_setting(name)",
+    "core.set_mapgen_setting(name, value)",
+    "core.settings:get(name)",
+    "core.settings:set(name, value)"
+  ]
+}
